@@ -28,6 +28,9 @@ if [ -n "$(git status --porcelain)" ]; then
     git commit -m "sync: $(date '+%Y-%m-%d %H:%M')"
 fi
 
+info "Checking packages..."
+"$REPO_DIR/setup/install.sh"
+
 info "Pushing to origin..."
 git push
 
@@ -57,6 +60,9 @@ for remote in "${REMOTES[@]}"; do
             echo "  Pulling..."
             git -C "$REPO_DIR" pull --ff-only
         fi
+
+        echo "  Checking packages..."
+        "$REPO_DIR/setup/install.sh"
 
         CHEZMOI=""
         if command -v chezmoi >/dev/null 2>&1; then
