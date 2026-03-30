@@ -32,7 +32,11 @@ info "Pushing to origin..."
 git push
 
 info "Applying locally..."
-chezmoi apply
+if chezmoi source-path &>/dev/null; then
+    chezmoi apply
+else
+    chezmoi init --source="$REPO_DIR" --apply
+fi
 
 # --- remotes ----------------------------------------------------------------
 
@@ -54,15 +58,22 @@ for remote in "${REMOTES[@]}"; do
             git -C "$REPO_DIR" pull --ff-only
         fi
 
+        CHEZMOI=""
         if command -v chezmoi >/dev/null 2>&1; then
-            chezmoi apply --source="$REPO_DIR"
-            echo "  Applied."
+            CHEZMOI="chezmoi"
         elif [ -x "$HOME/.local/bin/chezmoi" ]; then
-            "$HOME/.local/bin/chezmoi" apply --source="$REPO_DIR"
-            echo "  Applied."
+            CHEZMOI="$HOME/.local/bin/chezmoi"
         else
             echo "  chezmoi not found — run setup/install.sh on this machine first"
+            exit 0
         fi
+
+        if $CHEZMOI source-path &>/dev/null; then
+            $CHEZMOI apply
+        else
+            $CHEZMOI init --source="$REPO_DIR" --apply
+        fi
+        echo "  Applied."
 REMOTE_SCRIPT
 
     info "$remote done."

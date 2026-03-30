@@ -3,6 +3,8 @@
 {{- $is_server := eq $hostname "serveserve" -}}
 {{- $has_op := lookPath "op" | not | not -}}
 
+sourceDir = {{ .chezmoi.workingTree | quote }}
+
 [data]
   hostname = {{ $hostname | quote }}
   os = {{ $os | quote }}
