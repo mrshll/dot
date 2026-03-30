@@ -32,7 +32,11 @@ info "Pulling latest..."
 git pull --rebase
 
 info "Checking packages..."
-"$REPO_DIR/setup/install.sh"
+if [ "$(uname -s)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
+    brew bundle check --file="$REPO_DIR/Brewfile" &>/dev/null || brew bundle install --file="$REPO_DIR/Brewfile" --no-lock
+else
+    "$REPO_DIR/setup/install.sh"
+fi
 
 info "Pushing to origin..."
 git push
