@@ -1,0 +1,17 @@
+README.md
+setup/
+
+# kitty is macOS-only (GUI terminal)
+{{ if ne .chezmoi.os "darwin" }}
+.config/kitty
+{{ end }}
+
+# lazy-lock.json and lazyvim.json are machine-local state
+.config/nvim/lazy-lock.json
+.config/nvim/lazyvim.json
+
+# fish_variables are machine-local (color theme, universal vars)
+.config/fish/fish_variables
+
+# gh hosts contain auth tokens — managed per-machine by `gh auth login`
+.config/gh/hosts.yml

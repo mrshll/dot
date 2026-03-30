@@ -1,0 +1,10 @@
+{{- $hostname := .chezmoi.hostname -}}
+{{- $os := .chezmoi.os -}}
+{{- $is_server := eq $hostname "serveserve" -}}
+{{- $has_op := lookPath "op" | not | not -}}
+
+[data]
+  hostname = {{ $hostname | quote }}
+  os = {{ $os | quote }}
+  is_server = {{ $is_server }}
+  has_op = {{ $has_op }}

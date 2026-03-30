@@ -1,0 +1,17 @@
+if status is-interactive
+    # Commands to run in interactive sessions can go here
+end
+
+{{ if eq .chezmoi.os "darwin" -}}
+# macOS: Homebrew
+eval "$(/opt/homebrew/bin/brew shellenv)"
+{{- end }}
+
+# Pond
+fish_add_path ~/workspace/pond
+set -gx POND_SERVER 100.72.11.128
+
+{{ if eq .chezmoi.os "darwin" -}}
+# opencode (macOS only)
+fish_add_path /Users/marsh/.opencode/bin
+{{- end }}

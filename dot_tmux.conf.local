@@ -1,0 +1,39 @@
+# oh-my-tmux local overrides
+# see: https://github.com/gpakosz/.tmux#configuration
+
+# -- general -----------------------------------------------------------------
+
+# start window and pane numbering at 1
+set -g base-index 1
+setw -g pane-base-index 1
+
+# renumber windows when one is closed
+set -g renumber-windows on
+
+# increase history limit
+set -g history-limit 10000
+
+# -- display -----------------------------------------------------------------
+
+# true color support
+set -g default-terminal "tmux-256color"
+set -ga terminal-overrides ",*256col*:Tc"
+
+# -- navigation --------------------------------------------------------------
+
+# use vim-style pane navigation
+setw -g mode-keys vi
+
+# -- status bar --------------------------------------------------------------
+
+# customize the status bar (oh-my-tmux handles most of this, tweak as needed)
+# set -g @theme_status_right_prefix "#{?client_prefix,#[reverse] PREFIX #[noreverse] ,}"
+
+# -- clipboard ---------------------------------------------------------------
+
+# use system clipboard
+set -g set-clipboard on
+
+# -- mouse -------------------------------------------------------------------
+
+# mouse support is enabled by default in oh-my-tmux

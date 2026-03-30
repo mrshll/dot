@@ -1,0 +1,6 @@
+# chezmoi state (lives in ~/.local/share/chezmoi)
+.chezmoistate.boltdb
+
+# OS junk
+.DS_Store
+Thumbs.db
