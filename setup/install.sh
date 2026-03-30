@@ -12,6 +12,11 @@ err()   { printf '\033[1;31m==> %s\033[0m\n' "$*" >&2; }
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
+can_sudo() {
+    # True if we can run sudo (interactive terminal or passwordless sudo)
+    sudo -n true 2>/dev/null || [ -t 0 ]
+}
+
 OS="$(uname -s)"
 
 # --- platform installers ----------------------------------------------------
@@ -61,6 +66,10 @@ install_pkg() {
     case "$OS" in
         Darwin) brew_install "$brew_name" ;;
         Linux)
+            if ! can_sudo; then
+                warn "$cmd not installed — run setup/install.sh interactively (needs sudo)"
+                return
+            fi
             if [ "$apt_name" = "CUSTOM" ]; then
                 "install_${cmd}_linux"
             else
