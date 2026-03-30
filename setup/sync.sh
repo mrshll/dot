@@ -68,7 +68,8 @@ for remote in "${REMOTES[@]}"; do
             exit 0
         fi
 
-        if $CHEZMOI source-path &>/dev/null; then
+        SRC="$($CHEZMOI source-path 2>/dev/null || true)"
+        if [ -n "$SRC" ] && [ -d "$SRC" ]; then
             $CHEZMOI apply
         else
             $CHEZMOI init --source="$REPO_DIR" --apply
