@@ -28,6 +28,9 @@ if [ -n "$(git status --porcelain)" ]; then
     git commit -m "sync: $(date '+%Y-%m-%d %H:%M')"
 fi
 
+info "Pulling latest..."
+git pull --rebase
+
 info "Checking packages..."
 "$REPO_DIR/setup/install.sh"
 
