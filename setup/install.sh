@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Install chezmoi and optional dependencies.
-# Works on macOS (Homebrew) and Linux (apt + curl fallback).
+# Install chezmoi and core packages.
+# Works on macOS (Homebrew) and Linux (apt + fallbacks).
+# Safe to run repeatedly — skips already-installed packages.
 set -euo pipefail
 
 # --- helpers ----------------------------------------------------------------
@@ -13,7 +14,7 @@ command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 OS="$(uname -s)"
 
-# --- platform package helpers -----------------------------------------------
+# --- platform installers ----------------------------------------------------
 
 brew_install() {
     if ! command_exists brew; then
@@ -42,123 +43,61 @@ apt_install() {
     done
 }
 
-# --- chezmoi ----------------------------------------------------------------
+# --- core packages ----------------------------------------------------------
+#
+# Add packages here. Format:
+#   install <command_name> <brew_name> <apt_name|CUSTOM>
+#
+# Use CUSTOM for packages that need special install logic on Linux.
 
-install_chezmoi() {
-    if command_exists chezmoi; then
-        info "chezmoi already installed: $(chezmoi --version)"
+install_pkg() {
+    local cmd="$1" brew_name="$2" apt_name="$3"
+
+    if command_exists "$cmd"; then
+        info "$cmd already installed"
         return
     fi
 
     case "$OS" in
-        Darwin) brew_install chezmoi ;;
+        Darwin) brew_install "$brew_name" ;;
         Linux)
-            if command_exists apt-get; then
-                # chezmoi provides a one-liner that works everywhere
-                info "Installing chezmoi via official installer..."
-                sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
-                export PATH="$HOME/.local/bin:$PATH"
+            if [ "$apt_name" = "CUSTOM" ]; then
+                "install_${cmd}_linux"
             else
-                err "Unsupported Linux package manager — install chezmoi manually"
-                exit 1
-            fi
-            ;;
-        *) err "Unsupported OS: $OS"; exit 1 ;;
-    esac
-
-    info "chezmoi installed: $(chezmoi --version)"
-}
-
-# --- fish -------------------------------------------------------------------
-
-install_fish() {
-    if command_exists fish; then
-        info "fish already installed: $(fish --version)"
-        return
-    fi
-
-    case "$OS" in
-        Darwin) brew_install fish ;;
-        Linux)  apt_install fish ;;
-    esac
-}
-
-# --- neovim -----------------------------------------------------------------
-
-install_neovim() {
-    if command_exists nvim; then
-        info "nvim already installed: $(nvim --version | head -1)"
-        return
-    fi
-
-    case "$OS" in
-        Darwin) brew_install neovim ;;
-        Linux)
-            # Ubuntu's apt neovim is often outdated; use the PPA or appimage
-            if command_exists apt-get; then
-                info "Installing neovim via apt (consider PPA for latest)..."
-                apt_install neovim
+                apt_install "$apt_name"
             fi
             ;;
     esac
 }
 
-# --- btop -------------------------------------------------------------------
+# --- custom Linux installers for packages not in default apt ----------------
 
-install_btop() {
-    if command_exists btop; then
-        info "btop already installed"
-        return
+install_eza_linux() {
+    # eza has an official apt repo
+    if ! command_exists eza; then
+        info "Installing eza via official apt repo..."
+        sudo mkdir -p /etc/apt/keyrings
+        wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc | sudo gpg --dearmor -o /etc/apt/keyrings/gierens.gpg
+        echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" | sudo tee /etc/apt/sources.list.d/gierens.list
+        sudo chmod 644 /etc/apt/keyrings/gierens.gpg /etc/apt/sources.list.d/gierens.list
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq eza
     fi
-
-    case "$OS" in
-        Darwin) brew_install btop ;;
-        Linux)  apt_install btop ;;
-    esac
 }
 
-# --- tmux -------------------------------------------------------------------
-
-install_tmux() {
-    if command_exists tmux; then
-        info "tmux already installed: $(tmux -V)"
+install_bat_linux() {
+    # Ubuntu ships batcat; we alias it in fish
+    if command_exists batcat; then
+        info "batcat already installed (Ubuntu names it batcat)"
         return
     fi
-
-    case "$OS" in
-        Darwin) brew_install tmux ;;
-        Linux)  apt_install tmux ;;
-    esac
+    apt_install bat
 }
 
-# --- git ---------------------------------------------------------------------
-
-install_git() {
-    if command_exists git; then
-        info "git already installed: $(git --version)"
-        return
-    fi
-
-    case "$OS" in
-        Darwin) brew_install git ;;
-        Linux)  apt_install git ;;
-    esac
-}
-
-# --- 1Password CLI (optional) -----------------------------------------------
-
-install_op() {
-    if command_exists op; then
-        info "1Password CLI already installed: $(op --version)"
-        return
-    fi
-
-    warn "1Password CLI (op) not found."
-    warn "Install manually if you want secret auto-provisioning:"
-    case "$OS" in
-        Darwin) warn "  brew install --cask 1password-cli" ;;
-        Linux)  warn "  https://developer.1password.com/docs/cli/get-started/#install" ;;
-    esac
+install_chezmoi_linux() {
+    info "Installing chezmoi via official installer..."
+    sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+    export PATH="$HOME/.local/bin:$PATH"
 }
 
 # --- main -------------------------------------------------------------------
@@ -166,13 +105,29 @@ install_op() {
 info "Setting up on $OS ($(hostname))"
 echo
 
-install_git
-install_chezmoi
-install_fish
-install_neovim
-install_btop
-install_tmux
-install_op
+#              command   brew-name    apt-name
+install_pkg    git       git          git
+install_pkg    fish      fish         fish
+install_pkg    nvim      neovim       neovim
+install_pkg    tmux      tmux         tmux
+install_pkg    eza       eza          CUSTOM
+install_pkg    bat       bat          CUSTOM
+install_pkg    jq        jq           jq
+install_pkg    http      httpie       httpie
+install_pkg    fzf       fzf          fzf
+install_pkg    gh        gh           gh
+install_pkg    btop      btop         btop
+install_pkg    chezmoi   chezmoi      CUSTOM
+
+# 1Password CLI — optional, just advise
+if ! command_exists op; then
+    echo
+    warn "1Password CLI (op) not found — optional, for secret auto-provisioning:"
+    case "$OS" in
+        Darwin) warn "  brew install --cask 1password-cli" ;;
+        Linux)  warn "  https://developer.1password.com/docs/cli/get-started/#install" ;;
+    esac
+fi
 
 echo
 info "All tools installed. Next steps:"

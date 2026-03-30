@@ -1,5 +1,13 @@
 if status is-interactive
-    # Commands to run in interactive sessions can go here
+    alias vim nvim
+    alias ls eza
+    alias ll "eza -la"
+    alias tree "eza --tree"
+{{ if eq .chezmoi.os "linux" -}}
+    alias cat batcat
+{{ else -}}
+    alias cat bat
+{{ end -}}
 end
 
 {{ if eq .chezmoi.os "darwin" -}}
