@@ -103,6 +103,24 @@ install_bat_linux() {
     apt_install bat
 }
 
+install_op_linux() {
+    if ! command_exists op; then
+        info "Installing 1Password CLI via official apt repo..."
+        curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+            sudo gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" | \
+            sudo tee /etc/apt/sources.list.d/1password.list
+        sudo mkdir -p /etc/debsig/policies/AC2D62742012EA22/
+        curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol | \
+            sudo tee /etc/debsig/policies/AC2D62742012EA22/1password.pol
+        sudo mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
+        curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+            sudo gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq 1password-cli
+    fi
+}
+
 install_chezmoi_linux() {
     info "Installing chezmoi via official installer..."
     sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
@@ -128,15 +146,7 @@ install_pkg    gh        gh           gh
 install_pkg    btop      btop         btop
 install_pkg    chezmoi   chezmoi      CUSTOM
 
-# 1Password CLI — optional, just advise
-if ! command_exists op; then
-    echo
-    warn "1Password CLI (op) not found — optional, for secret auto-provisioning:"
-    case "$OS" in
-        Darwin) warn "  brew install --cask 1password-cli" ;;
-        Linux)  warn "  https://developer.1password.com/docs/cli/get-started/#install" ;;
-    esac
-fi
+install_pkg    op        1password-cli CUSTOM
 
 echo
 info "All tools installed. Next steps:"
