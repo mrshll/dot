@@ -1,10 +1,7 @@
 # Universal Guidelines
 
-## Scope discipline
-
-Do exactly what I ask — no more. Don't add refactors, style changes, dependencies, or "improvements" beyond the task. If something adjacent looks wrong, mention it — don't fix it. When I say "stop," stop immediately.
-
-Do not change text content, copy, or configuration unless explicitly asked.
+## Readme and plans 
+Keep a README.md or a plan.md as a living document. Update it as changes are made. If a plan, note when things are complete by editing the file. When a plan is complete, write a final update to the plan as a brief retro.
 
 ## Code style
 
