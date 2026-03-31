@@ -33,7 +33,7 @@ git pull --rebase
 
 info "Checking packages..."
 if [ "$(uname -s)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
-    brew bundle check --file="$REPO_DIR/Brewfile" &>/dev/null || brew bundle install --file="$REPO_DIR/Brewfile" --no-lock
+    brew bundle check --file="$REPO_DIR/Brewfile" &>/dev/null || brew bundle install --file="$REPO_DIR/Brewfile"
 else
     "$REPO_DIR/setup/install.sh"
 fi
