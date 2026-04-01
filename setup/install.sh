@@ -147,6 +147,7 @@ install_pkg    btop      btop         btop
 install_pkg    chezmoi   chezmoi      CUSTOM
 
 install_pkg    op        1password-cli CUSTOM
+install_pkg    vlc       vlc          vlc
 
 echo
 info "All tools installed. Next steps:"
