@@ -3,6 +3,8 @@
 ## Readme and plans 
 Keep a README.md or a plan.md as a living document. Update it as changes are made. If a plan, note when things are complete by editing the file. When a plan is complete, write a final update to the plan as a brief retro.
 
+When working on a plan, always create a branch and draft PR. Keep plans in `./plans/` (repo root), prefixed by the PR number (e.g. `plans/123_add_feature_b.md`).
+
 ## Code style
 
 Write code that explains itself. Add only extremely minimal comments and no docstrings unless I ask, but don't remove existing comments. Meaningful variable names over documented code.
