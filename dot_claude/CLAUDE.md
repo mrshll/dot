@@ -1,9 +1,10 @@
 # Universal Guidelines
 
-## Readme and plans 
-Keep a README.md or a plan.md as a living document. Update it as changes are made. If a plan, note when things are complete by editing the file. When a plan is complete, write a final update to the plan as a brief retro.
+## Plans
 
-When working on a plan, always create a branch and draft PR. Keep plans in `./plans/` (repo root), prefixed by the PR number (e.g. `plans/123_add_feature_b.md`).
+When working on a plan, always create a branch and draft PR. Store the plan as a markdown file in `./plans/` (repo root), prefixed by the PR number (e.g. `plans/123_add_feature_b.md`). Always use this in-repo method — do not rely on conversation-level planning alone.
+
+Use the plan as a living document. Mark items complete as work progresses. Append new sections as a log with an ISO 8601 date header (e.g. `### 2026-04-02 — PR feedback`) so the plan accumulates context over time — review feedback, revised scope, follow-up steps, etc. When the plan is complete, append a brief retro as the final entry.
 
 ## Code style
 
