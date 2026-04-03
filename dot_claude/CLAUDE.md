@@ -91,9 +91,26 @@ Before implementing something new, check ~/workspace for analogous patterns in e
 | `hrönir` | Python | Hydro forecast model testing (Chronos, TiRex) |
 | `dot` | Shell/chezmoi | Dotfiles |
 
+## Secrets & 1Password
+
+Use the 1Password CLI (`op`) for all secrets. Never commit secrets.
+
+Use `op run` to inject secrets as environment variables into commands. This avoids secrets touching disk or shell history:
+
+```bash
+op run --env-file=<(cat <<'EOF'
+ENV_VAR_NAME=op://vault/item/field
+EOF
+) -- some-command
+```
+
+For a single variable, the inline form works:
+```bash
+op run --env-file=<(echo 'MY_TOKEN=op://Private/Some Item/credential') -- some-command
+```
+
 ## Infrastructure
 
 - Server: serveserve.local (100.72.11.128 via Tailscale), Ubuntu
-- Secrets: 1Password CLI (`op`), never commit secrets
 - Dotfiles: chezmoi, managed from ~/workspace/dot
 - Shell: fish on all machines

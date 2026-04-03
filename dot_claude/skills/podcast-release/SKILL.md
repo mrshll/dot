@@ -16,8 +16,9 @@ The user needs to provide (or you need to locate):
 
 Tools that should be available on the system:
 - `ffmpeg` (for MP3 metadata/chapters)
-- `aws` CLI or `wrangler` (for R2 upload)
+- `aws` CLI (for R2 upload)
 - `git` (for committing to the dynamical.org repo)
+- `op` (1Password CLI — R2 credentials are stored in the "Cloudflare R2 Weathering" item)
 
 ## Pipeline Steps
 
@@ -83,11 +84,14 @@ Show the metadata summary to the user for confirmation.
 
 ### Step 3: Upload to R2
 
-Upload the final MP3 to the Cloudflare R2 bucket:
+Upload the final MP3 to the Cloudflare R2 bucket. Use `op run` to inject credentials from the "Cloudflare R2 Weathering" 1Password item:
 
 ```bash
-# Using AWS CLI with R2 endpoint
-aws s3 cp final.mp3 s3://weathering/EPISODE_NUMBER.mp3 \
+op run --env-file=<(cat <<'EOF'
+AWS_ACCESS_KEY_ID=op://Private/Cloudflare R2 Weathering/access key id
+AWS_SECRET_ACCESS_KEY=op://Private/Cloudflare R2 Weathering/secret access key
+EOF
+) -- aws s3 cp final.mp3 s3://weathering/EPISODE_NUMBER.mp3 \
   --endpoint-url https://a037e2d3d5f9c6ecfc95350360f2ab8d.r2.cloudflarestorage.com \
   --content-type audio/mpeg
 ```
