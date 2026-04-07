@@ -46,6 +46,8 @@ Be concise. Match my brevity. Don't restate what I said — just do it. Don't su
 
 When I say "commit and push" that's a single atomic action — do both.
 
+When outputting CLI commands for the user to run, always format them as a single line with no indentation. This makes them easy to copy and paste directly into a terminal.
+
 ## Validation
 
 Always validate against official documentation where possible.

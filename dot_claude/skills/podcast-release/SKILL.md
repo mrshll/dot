@@ -18,7 +18,7 @@ Tools that should be available on the system:
 - `ffmpeg` (for MP3 metadata/chapters)
 - `aws` CLI (for R2 upload)
 - `git` (for committing to the dynamical.org repo)
-- `op` (1Password CLI — R2 credentials are stored in the "Cloudflare R2 Weathering" item)
+- `op` (1Password CLI — R2 credentials are in the **Dynamical** vault)
 
 ## Pipeline Steps
 
@@ -33,7 +33,7 @@ Ask the user for:
 - Publish date (default: today)
 - Cover art path (default: download `https://weathering.dynamical.org/weathering_logo.png`)
 
-Fetch the Google Doc by appending `/export?format=txt` to the doc URL (follow redirects). Parse out:
+Fetch the Google Doc by appending `/export?format=html` to the doc URL (follow redirects). **Use HTML format, not TXT** — the plain text export strips all hyperlinks. Parse out:
 - **Title**: Usually the first line or clearly labeled
 - **Description/summary**: The introductory paragraph(s)
 - **Chapters**: Lines with timestamps in `HH:MM:SS` or `MM:SS` format
@@ -73,7 +73,7 @@ ffmpeg -i output.mp3 -i cover.png \
   final.mp3
 ```
 
-Use `scripts/write_chapters.py` to generate the ffmetadata file from the parsed chapter list.
+Write the ffmetadata file directly (it's a simple INI-like format — see the ffmpeg docs). Each `[CHAPTER]` block needs `TIMEBASE=1/1000`, `START`/`END` in milliseconds, and `title`. Use `ffprobe` to get the total duration for the final chapter's END time.
 
 After tagging, verify with:
 ```bash
@@ -84,12 +84,12 @@ Show the metadata summary to the user for confirmation.
 
 ### Step 3: Upload to R2
 
-Upload the final MP3 to the Cloudflare R2 bucket. Use `op run` to inject credentials from the "Cloudflare R2 Weathering" 1Password item:
+Upload the final MP3 to the Cloudflare R2 bucket. Use `op run` to inject credentials from the **Dynamical** vault:
 
 ```bash
 op run --env-file=<(cat <<'EOF'
-AWS_ACCESS_KEY_ID=op://Private/Cloudflare R2 Weathering/access key id
-AWS_SECRET_ACCESS_KEY=op://Private/Cloudflare R2 Weathering/secret access key
+AWS_ACCESS_KEY_ID=op://Dynamical/Cloudflare R2 Weathering/AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY=op://Dynamical/Cloudflare R2 Weathering/AWS_SECRET_ACCESS_KEY
 EOF
 ) -- aws s3 cp final.mp3 s3://weathering/EPISODE_NUMBER.mp3 \
   --endpoint-url https://a037e2d3d5f9c6ecfc95350360f2ab8d.r2.cloudflarestorage.com \
@@ -165,24 +165,66 @@ After the deploy completes (wait ~1-2 minutes), validate the podcast RSS feed:
 
 Report the validation results.
 
-### Step 6: Platform Distribution
+### Step 6: Fetch Platform URLs
 
-These steps require manual interaction. Guide the user through each:
+Automatically look up the Apple Podcasts and Spotify URLs for the new episode. Both platforms ingest from the RSS feed, so there may be a delay (minutes to hours). If the episode isn't found yet, tell the user and offer to move on to social posts — they can ask you to retry later.
 
-**Apple Podcasts:**
-- Open https://podcastsconnect.apple.com
-- The feed should auto-update, but you can manually refresh
-- Once the episode appears, grab the Apple Podcasts URL
+**Apple Podcasts (automatic, no auth):**
 
-**Spotify (creators.spotify.com):**
-- Open https://creators.spotify.com
-- Create a new episode manually (Spotify doesn't have a public upload API for podcasts)
-- Upload the same MP3 or let it pull from the RSS feed
-- Once published, grab the Spotify URL
+Use the iTunes Lookup API. The Weathering podcast Apple ID is `1820085883`.
 
-After getting both URLs, update the episode markdown:
 ```bash
-# Edit content/podcast/NNN.md to add spotify_url and apple_url
+curl -s "https://itunes.apple.com/lookup?id=1820085883&media=podcast&entity=podcastEpisode&limit=5" \
+  | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for r in data['results']:
+    if r.get('kind') == 'podcast-episode':
+        print(f'{r[\"trackName\"]}')
+        print(f'  {r[\"trackViewUrl\"]}')
+"
+```
+
+Match the episode by title (fuzzy/substring match is fine). The URL will look like:
+`https://podcasts.apple.com/us/podcast/SLUG/id1820085883?i=TRACK_ID`
+
+Strip any `&uo=4` tracking parameter from the URL before saving.
+
+**Spotify (automatic via Playwright):**
+
+Use Playwright (browser MCP tools) to scrape the Spotify show page. No auth needed — the show page is publicly accessible. The Weathering show URL is `https://open.spotify.com/show/36UXpdChq6oik7jzZKgLnW`.
+
+1. Navigate to the show URL with `browser_navigate`
+2. Take a snapshot with `browser_snapshot` — episode titles and links (`/episode/ID`) are visible in the accessibility tree
+3. If there are more episodes than shown, click the "Load more episodes" checkbox
+4. Extract episode links using `browser_run_code`:
+
+```javascript
+async (page) => {
+  const episodes = await page.evaluate(() => {
+    const links = document.querySelectorAll('a[href*="/episode/"]');
+    const seen = new Set();
+    const results = [];
+    for (const link of links) {
+      const href = link.getAttribute('href');
+      const text = link.textContent.trim();
+      if (href && text && !seen.has(href)) {
+        seen.add(href);
+        results.push({ title: text, url: `https://open.spotify.com${href}` });
+      }
+    }
+    return results;
+  });
+  return JSON.stringify(episodes, null, 2);
+}
+```
+
+Match the episode by title. The URL format is: `https://open.spotify.com/episode/EPISODE_ID`
+
+**After getting both URLs**, update the episode markdown frontmatter, commit, and push:
+
+```bash
+# Edit content/podcast/NNN.md to set spotify_url and apple_url
 git add content/podcast/NNN.md
 git commit -m "Add platform URLs for episode NNN"
 git push origin main
