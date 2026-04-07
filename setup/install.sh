@@ -58,21 +58,24 @@ apt_install() {
 install_pkg() {
     local cmd="$1" brew_name="$2" apt_name="$3"
 
-    if command_exists "$cmd"; then
-        info "$cmd already installed"
-        return
-    fi
-
     case "$OS" in
-        Darwin) brew_install "$brew_name" ;;
+        Darwin)
+            if command_exists "$cmd"; then info "$cmd already installed"; return; fi
+            brew_install "$brew_name"
+            ;;
         Linux)
-            if ! can_sudo; then
-                warn "$cmd not installed — run setup/install.sh interactively (needs sudo)"
-                return
-            fi
             if [ "$apt_name" = "CUSTOM" ]; then
+                if ! can_sudo; then
+                    warn "$cmd not installed — run setup/install.sh interactively (needs sudo)"
+                    return
+                fi
                 "install_${cmd}_linux"
             else
+                if command_exists "$cmd"; then info "$cmd already installed"; return; fi
+                if ! can_sudo; then
+                    warn "$cmd not installed — run setup/install.sh interactively (needs sudo)"
+                    return
+                fi
                 apt_install "$apt_name"
             fi
             ;;
@@ -121,6 +124,28 @@ install_op_linux() {
     fi
 }
 
+install_nvim_linux() {
+    local min_ver="0.11.2"
+    if command_exists nvim; then
+        local cur
+        cur="$(nvim --version | head -1 | sed 's/NVIM v//')"
+        if printf '%s\n%s\n' "$min_ver" "$cur" | sort -V | head -1 | grep -qx "$min_ver"; then
+            info "nvim $cur >= $min_ver — skipping"
+            return
+        fi
+        warn "nvim $cur < $min_ver — upgrading..."
+    fi
+    info "Installing neovim from GitHub releases..."
+    local tmp
+    tmp="$(mktemp -d)"
+    curl -fsSL https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz \
+        | tar xz -C "$tmp"
+    sudo rm -rf /opt/nvim
+    sudo mv "$tmp/nvim-linux-x86_64" /opt/nvim
+    sudo ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
+    rm -rf "$tmp"
+}
+
 install_chezmoi_linux() {
     info "Installing chezmoi via official installer..."
     sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
@@ -135,7 +160,7 @@ echo
 #              command   brew-name    apt-name
 install_pkg    git       git          git
 install_pkg    fish      fish         fish
-install_pkg    nvim      neovim       neovim
+install_pkg    nvim      neovim       CUSTOM
 install_pkg    tmux      tmux         tmux
 install_pkg    eza       eza          CUSTOM
 install_pkg    bat       bat          CUSTOM

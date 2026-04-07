@@ -54,7 +54,7 @@ for remote in "${REMOTES[@]}"; do
     echo
     info "Syncing $remote..."
 
-    ssh "$remote" bash -s -- "$REPO_REMOTE" <<'REMOTE_SCRIPT'
+    ssh -t "$remote" bash -s -- "$REPO_REMOTE" <<'REMOTE_SCRIPT'
         set -euo pipefail
         REPO_REMOTE="$1"
         REPO_DIR="$HOME/workspace/dot"
