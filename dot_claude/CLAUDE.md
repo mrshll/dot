@@ -116,3 +116,7 @@ op run --env-file=<(echo 'MY_TOKEN=op://Private/Some Item/credential') -- some-c
 - Server: serveserve.local (100.72.11.128 via Tailscale), Ubuntu
 - Dotfiles: chezmoi, managed from ~/workspace/dot
 - Shell: fish on all machines
+
+## Dotfiles edits
+
+Never edit applied dotfiles in place (e.g. `~/.claude/*`, `~/.config/nvim/*`, `~/.gitconfig`). Always edit the chezmoi source in `~/workspace/dot/` (e.g. `dot_claude/`, `dot_config/nvim/`) and then run `~/workspace/dot/setup/sync.sh` to commit, push, and apply across all machines. Editing the applied copy gets clobbered on the next `chezmoi apply` and never reaches the server.
