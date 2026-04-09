@@ -1,6 +1,8 @@
-[
-  {
-    "action": "voice:pushToTalk",
-    "key": "meta+k"
-  }
-]
+{
+  "bindings": [
+    {
+      "action": "voice:pushToTalk",
+      "key": "meta+k"
+    }
+  ]
+}
