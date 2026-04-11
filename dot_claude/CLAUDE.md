@@ -97,7 +97,7 @@ Before implementing something new, check ~/workspace for analogous patterns in e
 
 Use the 1Password CLI (`op`) for all secrets. Never commit secrets.
 
-Use `op run` to inject secrets as environment variables into commands. This avoids secrets touching disk or shell history:
+Never use `op item get` — it prints secrets into the terminal and conversation context. Always use `op run` to inject secrets as environment variables into commands. This avoids secrets touching disk or shell history:
 
 ```bash
 op run --env-file=<(cat <<'EOF'
