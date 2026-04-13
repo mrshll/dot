@@ -6,6 +6,30 @@ When working on a plan, always create a branch and draft PR. Store the plan as a
 
 Use the plan as a living document. Mark items complete as work progresses. Append new sections as a log with an ISO 8601 date header (e.g. `### 2026-04-02 — PR feedback`) so the plan accumulates context over time — review feedback, revised scope, follow-up steps, etc. When the plan is complete, append a brief retro as the final entry.
 
+## Think Before Coding
+
+Don't assume. Don't hide confusion. Surface tradeoffs.
+
+- State assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## Goal-Driven Execution
+
+Transform requests into verifiable success criteria so I can loop independently until the goal is met.
+
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan with a verification step per item:
+
+```
+1. [step] → verify: [check]
+2. [step] → verify: [check]
+```
+
 ## Code style
 
 Write code that explains itself. Add only extremely minimal comments and no docstrings unless I ask, but don't remove existing comments. Meaningful variable names over documented code.
@@ -17,6 +41,15 @@ Don't write error handling unless I ask for it. Don't smooth over exceptions unl
 All functions should have return types defined. Use strict types — interfaces for object shapes, proper generics where applicable.
 
 Follow existing patterns in the codebase. Match the style, structure, and conventions already established before introducing anything new.
+
+## Surgical Changes
+
+Touch only what I asked for. Every changed line should trace directly to my request.
+
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- If you notice unrelated dead code, mention it — don't delete it.
+- Remove imports/variables/functions that *your* changes made unused. Don't remove pre-existing dead code unless asked.
 
 ## Python
 
