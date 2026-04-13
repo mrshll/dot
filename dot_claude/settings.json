@@ -55,5 +55,6 @@
     "explanatory-output-style@claude-plugins-official": true
   },
   "effortLevel": "high",
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "showThinkingSummaries": true
 }
