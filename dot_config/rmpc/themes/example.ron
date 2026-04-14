@@ -100,20 +100,20 @@
             alignment: Right,
         ),
     ],
+    header_column_widths: [100, 0, 0],
     header: (
         rows: [
             (
-                left: [],
-                center: [
+                left: [
                     (kind: Property(Song(Title)),
                         style: (modifiers: "Bold"),
                         default: (kind: Text("No Song"), style: (modifiers: "Bold"))),
                 ],
+                center: [],
                 right: [],
             ),
             (
-                left: [],
-                center: [
+                left: [
                     (kind: Property(Song(Artist)),
                         style: (fg: "yellow", modifiers: "Bold"),
                         default: (kind: Text("Unknown"), style: (fg: "yellow", modifiers: "Bold"))),
@@ -121,6 +121,7 @@
                     (kind: Property(Song(Album)),
                         default: (kind: Text("Unknown Album"))),
                 ],
+                center: [],
                 right: [],
             ),
         ],
@@ -143,6 +144,10 @@
                         ),
                     ]
                 ),
+            ),
+            (
+                size: "1",
+                pane: Pane(Empty()),
             ),
             (
                 size: "1",
@@ -185,6 +190,10 @@
                         ),
                     ]
                 ),
+            ),
+            (
+                size: "1",
+                pane: Pane(Empty()),
             ),
             (
                 size: "3",
