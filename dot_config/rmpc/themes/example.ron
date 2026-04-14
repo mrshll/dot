@@ -100,6 +100,31 @@
             alignment: Right,
         ),
     ],
+    header: (
+        rows: [
+            (
+                left: [],
+                center: [
+                    (kind: Property(Song(Title)),
+                        style: (modifiers: "Bold"),
+                        default: (kind: Text("No Song"), style: (modifiers: "Bold"))),
+                ],
+                right: [],
+            ),
+            (
+                left: [],
+                center: [
+                    (kind: Property(Song(Artist)),
+                        style: (fg: "yellow", modifiers: "Bold"),
+                        default: (kind: Text("Unknown"), style: (fg: "yellow", modifiers: "Bold"))),
+                    (kind: Text(" - ")),
+                    (kind: Property(Song(Album)),
+                        default: (kind: Text("Unknown Album"))),
+                ],
+                right: [],
+            ),
+        ],
+    ),
     layout: Split(
         direction: Vertical,
         panes: [
@@ -118,6 +143,16 @@
                         ),
                     ]
                 ),
+            ),
+            (
+                size: "1",
+                pane: Pane(Property(
+                    content: [
+                        (kind: Property(Status(StateV2( ))),
+                            style: (fg: "yellow", modifiers: "Bold")),
+                    ],
+                    align: Center,
+                )),
             ),
             (
                 size: "1",
