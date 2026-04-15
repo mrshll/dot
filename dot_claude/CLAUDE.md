@@ -85,8 +85,6 @@ When outputting CLI commands for the user to run, always format them as a single
 
 Always validate against official documentation where possible.
 
-After visual/frontend changes, verify with a screenshot if Playwright is available.
-
 ## Prior art
 
 Before implementing something new, check ~/workspace for analogous patterns in existing projects. If a similar problem has been solved before, follow that approach rather than inventing a new one.
