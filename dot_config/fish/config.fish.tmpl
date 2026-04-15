@@ -13,6 +13,10 @@ end
 {{ if eq .chezmoi.os "darwin" -}}
 # macOS: Homebrew
 eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# MPD runs on serveserve.local
+set -gx MPD_HOST 100.72.11.128
+set -gx MPD_PORT 6600
 {{- end }}
 
 # Pond
