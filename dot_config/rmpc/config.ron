@@ -2,7 +2,7 @@
 #![enable(unwrap_newtypes)]
 #![enable(unwrap_variant_newtypes)]
 (
-    address: "100.72.11.128:6600",
+    address: "127.0.0.1:6600",
     password: None,
     theme: "example",
     cache_dir: None,
