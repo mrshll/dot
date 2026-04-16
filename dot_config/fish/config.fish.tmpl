@@ -21,6 +21,11 @@ fish_add_path ~/workspace/pond
 set -gx POND_SERVER 100.72.11.128
 
 {{ if eq .chezmoi.os "darwin" -}}
+# MPD on serveserve
+set -gx MPD_HOST $POND_SERVER
+{{- end }}
+
+{{ if eq .chezmoi.os "darwin" -}}
 # opencode (macOS only)
 fish_add_path /Users/marsh/.opencode/bin
 {{- end }}

@@ -2,7 +2,11 @@
 #![enable(unwrap_newtypes)]
 #![enable(unwrap_variant_newtypes)]
 (
+{{ if eq .chezmoi.os "darwin" -}}
+    address: "100.72.11.128:6600",
+{{ else -}}
     address: "127.0.0.1:6600",
+{{ end -}}
     password: None,
     theme: "example",
     cache_dir: None,
