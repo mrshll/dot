@@ -1,0 +1,22 @@
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[user]
+	name = mrsll
+	email = m@mrshll.com
+{{- if eq .chezmoi.os "darwin" }}
+	signingkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOLRfIvUP4+pblDUzkqEQOgZ01t08UAaq6ia6K0YCmoN
+{{- end }}
+[push]
+	autoSetupRemote = true
+{{- if eq .chezmoi.os "darwin" }}
+[gpg]
+	format = ssh
+[gpg "ssh"]
+	program = /Applications/1Password.app/Contents/MacOS/op-ssh-sign
+	allowedSignersFile = ~/.config/git/allowed_signers
+[commit]
+	gpgsign = true
+{{- end }}
