@@ -10,6 +10,7 @@ brew "gh"
 brew "httpie"
 brew "neovim"
 brew "ripgrep"
+brew "rmpc"
 brew "wget"
 
 # Languages
@@ -31,7 +32,7 @@ brew "overmind"
 
 # Apps
 cask "1password-cli"
-cask "gcloud-cli"
+cask "google-chrome"
 cask "kitty"
 cask "localsend"
 cask "obsidian"
