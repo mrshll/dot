@@ -241,11 +241,13 @@ Use these patterns to present content. All are implemented with plain CSS — no
 ```
 Style: `border: 1px solid var(--border); padding: 1.4rem 1.8rem; margin: 1.6rem 0;`
 
-### Note / annotation (for caveats, sources, secondary context)
+### Note / blockquote (ONLY for quoting an external source)
 ```html
-<div class="note">This is a secondary observation or caveat.</div>
+<div class="note">"Quoted text from an external source." — Source name</div>
 ```
 Style: `border-left: 2px solid var(--border-md); padding-left: 1rem; font-size: 1.2rem; color: var(--muted);`
+
+The left-border style reads as a blockquote, so reserve `.note` for actual quotations from an external source. Do NOT use it for your own caveats, annotations, or secondary context — that's what `.small-note` is for (fine print, no border). It's an easy style to overuse; default to a plain `<p>` or `.small-note` and reach for `.note` only when there's a source to attribute.
 
 ### Data table
 ```html
@@ -340,6 +342,6 @@ After writing all slide content, do a final pass before saving:
 
 - **Remove notes that repeat the table.** If a `.note` or callout restates information already visible in a table on the same slide, cut it.
 - **Merge intro paragraphs.** If two consecutive paragraphs say the same thing at different levels of abstraction, merge them into one.
-- **Cap at one `.note` per slide.** If you have two notes, keep the one that adds new information; cut the other.
+- **Cap secondary annotations at one per slide.** If you have two `.small-note`/caveat lines, keep the one that adds new information; cut the other.
 - **Cut implicit qualifications.** Phrases like "subject to board approval" or "as always, individual results may vary" are usually clear from context. Remove them unless they carry real legal or practical weight for the audience.
 - **Trim callouts to headline + one sentence.** A callout's `<strong>` line should stand alone. If the supporting sentence just re-explains the headline, delete it.
