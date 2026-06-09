@@ -4,6 +4,7 @@ if status is-interactive
     alias ssh "kitten ssh"
     alias ll "eza -la"
     alias tree "eza --tree"
+    alias lark "op run --env-file=op.env -- uv run python -m"
 {{ if eq .chezmoi.os "linux" -}}
     alias cat batcat
 {{ else -}}
