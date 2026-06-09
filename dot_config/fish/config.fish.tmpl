@@ -4,7 +4,12 @@ if status is-interactive
     alias ssh "kitten ssh"
     alias ll "eza -la"
     alias tree "eza --tree"
+{{ if eq .chezmoi.os "darwin" -}}
+    # NAS is mounted at /Volumes/NAS on the laptop (vs /mnt/nas on the server)
+    alias lark "op run --env-file=op.env -- env LIBRARY_DIR=/Volumes/NAS/Music STAGING_DIR=/Volumes/NAS/staging PLAYLIST_DIR=/Volumes/NAS/Music/playlists uv run python -m"
+{{ else -}}
     alias lark "op run --env-file=op.env -- uv run python -m"
+{{ end -}}
 {{ if eq .chezmoi.os "linux" -}}
     alias cat batcat
 {{ else -}}
