@@ -19,7 +19,7 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 
 # Pond
 fish_add_path ~/workspace/pond
-set -gx POND_SERVER 100.72.11.128
+set -gx POND_SERVER serveserve.local  # pond binaries fall back to Tailscale IP automatically
 
 {{ if eq .chezmoi.os "darwin" -}}
 # MPD on serveserve
