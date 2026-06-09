@@ -46,7 +46,15 @@
     "explanatory-output-style@claude-plugins-official": false
   },
   "effortLevel": "high",
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
-  "skipAutoPermissionPrompt": true
+  "theme": "auto",
+  "editorMode": "vim",
+  "preferredNotifChannel": "iterm2",
+  "skipAutoPermissionPrompt": true,
+  "voiceEnabled": true
 }
