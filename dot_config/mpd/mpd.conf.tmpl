@@ -1,0 +1,50 @@
+{{ if eq .chezmoi.os "darwin" -}}
+music_directory         "/Volumes/NAS/Music"
+{{- else -}}
+music_directory         "/mnt/nas/Music"
+{{- end }}
+playlist_directory      "~/.mpd/playlists"
+db_file                 "~/.mpd/mpd.db"
+log_file                "~/.mpd/mpd.log"
+pid_file                "~/.mpd/mpd.pid"
+state_file              "~/.mpd/mpdstate"
+auto_update             "yes"
+auto_update_depth       "2"
+follow_outside_symlinks "yes"
+follow_inside_symlinks  "yes"
+
+{{ if eq .chezmoi.os "darwin" -}}
+# Local playback on macOS
+audio_output {
+    type                  "osx"
+    name                  "CoreAudio"
+    mixer_type            "software"
+}
+
+decoder {
+    plugin                "mp4ff"
+    enabled               "no"
+}
+
+bind_to_address         "127.0.0.1"
+port                    "6600"
+{{- else -}}
+# Server: listen on all interfaces and stream over HTTP.
+# always_on keeps the encoder running (silence when idle) so clients can
+# connect before playback starts and hear audio the instant a track plays.
+bind_to_address         "0.0.0.0"
+port                    "6600"
+
+audio_output {
+    type            "httpd"
+    name            "HTTP Stream"
+    encoder         "lame"
+    port            "8000"
+    bitrate         "320"
+    format          "44100:16:2"
+    max_clients     "10"
+    mixer_type      "software"
+    always_on       "yes"
+    tags            "yes"
+}
+{{- end }}
