@@ -2,10 +2,9 @@
 
 ## Plans
 
-When working on a plan for a major change or feature, create a branch and draft PR.
+When working on a plan for a major change or feature, create a branch and draft PR. The plan lives in the PR description.
 
-- **If I provide an issue** (e.g. a GitHub issue number or URL in the prompt): store the plan in the issue itself, as the issue body or a comment.
-- **Otherwise**: store the plan as a markdown file in `./plans/` (repo root), prefixed by the PR number (e.g. `plans/123_add_feature_b.md`). Don't check the plan in yourself -- let me do that manually or specify to do so.
+While working, keep the plan as a local untracked markdown file in `./plans/` (repo root), prefixed by the PR number (e.g. `plans/123_add_feature_b.md`) — don't commit it. Once the PR is ready, move the plan into the PR description and delete the local file.
 
 Use the plan as a living document. Mark items complete as work progresses. Append new sections as a log with an ISO 8601 date header (e.g. `### 2026-04-02 — PR feedback`) so the plan accumulates context over time. When the plan is complete, append a brief retro as the final entry.
 
