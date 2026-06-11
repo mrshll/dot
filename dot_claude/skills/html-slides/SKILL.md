@@ -336,6 +336,66 @@ Add this media query for narrow screens:
 }
 ```
 
+## Line-wrap audit
+
+After saving the file, open it in a browser and run a DOM check to find "widow" lines — text that wraps but leaves only a word or two on the second line. These read as layout mistakes even when the content is correct.
+
+**Step 1 — open the file**
+
+Use the Playwright browser tool to navigate to the saved file:
+```
+file:///absolute/path/to/the/file.html
+```
+
+**Step 2 — inject the detection script**
+
+Run this in `browser_evaluate` (or equivalent):
+
+```js
+const results = [];
+document.querySelectorAll('h1, h2, p, li, td, th, .callout strong, .slide-label').forEach(el => {
+  // Skip invisible elements
+  if (!el.offsetParent && el.tagName !== 'BODY') return;
+  // Measure natural (no-wrap) width vs actual rendered width
+  const saved = el.style.whiteSpace;
+  el.style.whiteSpace = 'nowrap';
+  const naturalWidth = el.scrollWidth;
+  el.style.whiteSpace = saved;
+  const containerWidth = el.getBoundingClientRect().width;
+  if (naturalWidth <= containerWidth) return; // fits fine
+  // Measure actual line count via range rects
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const rects = [...range.getClientRects()].filter(r => r.width > 4);
+  if (rects.length < 2) return;
+  const lastLineWidth = rects[rects.length - 1].width;
+  const spillRatio = lastLineWidth / containerWidth;
+  if (spillRatio < 0.45) {
+    results.push({
+      slide: el.closest('.slide')?.id ?? '?',
+      tag: el.tagName.toLowerCase(),
+      text: el.textContent.trim().slice(0, 100),
+      spillPct: Math.round(spillRatio * 100),
+      overflowPx: Math.round(naturalWidth - containerWidth),
+    });
+  }
+});
+return results;
+```
+
+Each result describes a widow: `spillPct` is how much of the container width the last line occupies (low = worse), and `overflowPx` is how many pixels over the container the full text would be if unbroken.
+
+**Step 3 — fix findings**
+
+For each flagged element, apply the least-invasive fix that eliminates the widow:
+
+- **Content edit (preferred):** shorten the phrase — cut a word, tighten a clause, replace a long word with a shorter synonym. Preserve the meaning exactly.
+- **CSS: `letter-spacing`:** reducing by up to `−0.03em` is imperceptible; use this when `overflowPx` is small (< 10px) and rewording would change the meaning.
+- **CSS: `font-size`:** only on headings, and only drop by 0.1–0.2rem at most. Not on body text.
+- **Do not:** add `white-space: nowrap` (hides the problem), force a manual `<br>`, or make content changes that alter the meaning or tone.
+
+After fixes, re-run the detection script to confirm all widows are gone before reporting the file as complete.
+
 ## Succinctness review
 
 After writing all slide content, do a final pass before saving:
