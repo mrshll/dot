@@ -1,0 +1,17 @@
+[ui]
+agent_panel_sort = "spaces"
+
+[keys]
+# Space picker: prefix+w, then j/k.
+navigate_workspace_down = "j"
+navigate_workspace_up = "k"
+
+# Direct cycling between spaces and agents.
+previous_workspace = "ctrl+alt+h"
+next_workspace = "ctrl+alt+l"
+previous_agent = "ctrl+alt+k"
+next_agent = "ctrl+alt+j"
+
+# Direct indexed jumps.
+focus_agent = "ctrl+alt+1..9"
+switch_workspace = "ctrl+alt+shift+1..9"
