@@ -11,7 +11,3 @@ previous_workspace = "ctrl+alt+h"
 next_workspace = "ctrl+alt+l"
 previous_agent = "ctrl+alt+k"
 next_agent = "ctrl+alt+j"
-
-# Direct indexed jumps.
-focus_agent = "ctrl+alt+1..9"
-switch_workspace = "ctrl+alt+shift+1..9"
