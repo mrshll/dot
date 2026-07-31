@@ -4,6 +4,7 @@ setup/
 # kitty is macOS-only (GUI terminal)
 {{ if ne .chezmoi.os "darwin" }}
 .config/kitty
+.codex/config.toml
 {{ end }}
 
 # lazy-lock.json and lazyvim.json are machine-local state
