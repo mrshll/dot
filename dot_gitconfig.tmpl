@@ -6,13 +6,18 @@
 [user]
 	name = mrsll
 	email = m@mrshll.com
+{{- if eq .chezmoi.os "darwin" }}
 	signingkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOLRfIvUP4+pblDUzkqEQOgZ01t08UAaq6ia6K0YCmoN
+{{- else }}
+	signingkey = {{ .chezmoi.homeDir }}/.ssh/id_ed25519
+{{- end }}
 [push]
 	autoSetupRemote = true
 [gpg]
 	format = ssh
-{{/* macOS signs via 1Password; elsewhere git's default ssh-keygen signs against
-     the forwarded agent, which carries the same key. */ -}}
+{{/* macOS signs via 1Password. Elsewhere ssh-keygen signs from the on-disk host
+     key: a forwarded agent only lives as long as the SSH session, so herdr panes
+     — which outlive it — could not sign. Both keys are in allowed_signers. */ -}}
 [gpg "ssh"]
 {{- if eq .chezmoi.os "darwin" }}
 	program = /Applications/1Password.app/Contents/MacOS/op-ssh-sign
