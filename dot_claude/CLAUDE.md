@@ -50,6 +50,25 @@ Match my brevity. Don't restate what I said — just do it.
 
 When outputting CLI commands for me to run, format as a single line with no indentation so they're copy-pasteable.
 
+## Secrets
+
+Use `passh`, never bare `op`. It runs the 1Password CLI where the biometrics
+are: locally on the Mac, forwarded over SSH to the Mac from serveserve (whose
+1Password app throws its auth prompt onto a GUI nobody watches). Bare `op` on
+serveserve fails with `cannot connect to 1Password app` — that's expected.
+
+Inject secrets, never print them:
+
+```bash
+passh run --env-file=<(echo 'MY_TOKEN=op://Dynamical/item/field') -- some-command
+```
+
+Add `--account upstreamtech` for work vaults. Never use `passh read` or
+`op item get` to pull a secret into the terminal — it lands in the transcript.
+To prove a value resolved, check `${#VAR}`, not the value. `passh doctor`
+diagnoses the link. `passh` blocks `service-account`, `signin`, and
+`account add/forget` so no durable credential can be minted on the server.
+
 ## Infrastructure
 
 - Server: serveserve.local (100.72.11.128 via Tailscale), Ubuntu
