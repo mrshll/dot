@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/espanso/espanso/dev/schemas/match.schema.json
+
+# Prompts typed into Claude Code. Each opens a form for the PR number.
+#
+# NOTE: espanso fires a trigger the instant its exact characters are typed, with
+# no lookahead — so no trigger here may be a prefix of another. That is why the
+# second one is `:claude-monitor`, not `:claude-review-monitor`.
+
+matches:
+  # Kick off a review of a PR, posted back to the PR itself. The bare number
+  # targets the PR rather than the working tree; --comment posts findings as
+  # inline PR comments.
+  - trigger: ":claude-review"
+    form: "/code-review [[num]] --comment"
+
+  # Hand the waiting-and-responding half to a second agent.
+  - trigger: ":claude-monitor"
+    form: "pr#[[num]] is being reviewed by claude. it will post review as comments to the PR. it may take up to 20 minutes - monitor the PR and address its comments as necessary once they are available"

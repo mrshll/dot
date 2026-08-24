@@ -1,0 +1,11 @@
+# passh lives in its own repo (github.com/mrshll/passh). chezmoi clones it here
+# and the symlinks in dot_local/bin point at the clone, so the repo stays the
+# single source of truth. https, so no machine needs GitHub auth to apply.
+[".local/share/passh"]
+    type = "git-repo"
+    url = "https://github.com/mrshll/passh.git"
+    refreshPeriod = "168h"
+    [".local/share/passh".clone]
+        args = ["--depth", "1"]
+    [".local/share/passh".pull]
+        args = ["--ff-only"]

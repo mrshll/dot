@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/espanso/espanso/dev/schemas/match.schema.json
+
+# Global expansions. Every .yml in this dir is loaded, so group related
+# expansions into their own files (email.yml, dates.yml, ...) as they pile up.
+# Docs: https://espanso.org/docs/matches/basics/
+
+matches: []

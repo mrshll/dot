@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/espanso/espanso/dev/schemas/config.schema.json
+
+# Global espanso options. Per-app overrides go in sibling files in this dir.
+# Docs: https://espanso.org/docs/configuration/basics/
+
+# Disable the search bar shortcut — ALT+SPACE belongs to the app launcher.
+# The `search_trigger` expansion still opens it if needed.
+search_shortcut: OFF
+
+# Otherwise defaults: ALT double-tap toggles espanso, Auto injection backend,
+# auto_restart on file change.

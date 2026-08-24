@@ -32,6 +32,7 @@ brew "overmind"
 
 # Apps
 cask "1password-cli"
+cask "espanso"
 cask "google-chrome"
 cask "kitty"
 cask "localsend"
