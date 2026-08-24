@@ -53,9 +53,10 @@ When outputting CLI commands for me to run, format as a single line with no inde
 ## Secrets
 
 Use `passh`, never bare `op`. It runs the 1Password CLI where the biometrics
-are: locally on the Mac, forwarded over SSH to the Mac from serveserve (whose
-1Password app throws its auth prompt onto a GUI nobody watches). Bare `op` on
-serveserve fails with `cannot connect to 1Password app` — that's expected.
+are: locally on the Mac, and from serveserve back to the Mac through a tunnel
+carried by my SSH session (serveserve's 1Password app throws its auth prompt
+onto a GUI nobody watches). Bare `op` on serveserve fails with `cannot connect
+to 1Password app` — that's expected.
 
 Inject secrets, never print them:
 
@@ -65,9 +66,12 @@ passh run --env-file=<(echo 'MY_TOKEN=op://Dynamical/item/field') -- some-comman
 
 Add `--account upstreamtech` for work vaults. Never use `passh read` or
 `op item get` to pull a secret into the terminal — it lands in the transcript.
-To prove a value resolved, check `${#VAR}`, not the value. `passh doctor`
-diagnoses the link. `passh` blocks `service-account`, `signin`, and
-`account add/forget` so no durable credential can be minted on the server.
+To prove a value resolved, check `${#VAR}`, not the value.
+
+Vault access from serveserve exists only while my SSH session is open — if
+`passh` reports it cannot reach passhd, my Mac is asleep or disconnected. Say
+so and stop; don't route around it with a service-account token. `passh doctor`
+diagnoses the link.
 
 ## Infrastructure
 

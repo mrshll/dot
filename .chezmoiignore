@@ -1,11 +1,22 @@
 README.md
 setup/
 
-# kitty is macOS-only (GUI terminal)
+# kitty and espanso are macOS-only (GUI-only; the server is headless)
 {{ if ne .chezmoi.os "darwin" }}
 .config/kitty
+.config/espanso
 .codex/config.toml
 {{ end }}
+
+# passhd and its launch agent are macOS-only: the Mac is the machine with the
+# biometrics, so it runs the daemon. The server only ever runs the passh client.
+{{ if ne .chezmoi.os "darwin" }}
+.local/bin/passhd
+Library
+{{ end }}
+
+# espanso hub packages are installed with `espanso install`, not tracked here
+.config/espanso/match/packages
 
 # lazy-lock.json and lazyvim.json are machine-local state
 .config/nvim/lazy-lock.json
