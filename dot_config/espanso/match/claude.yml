@@ -1,18 +1,30 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/espanso/espanso/dev/schemas/match.schema.json
 
-# Prompts typed into Claude Code. Each opens a form for the PR number.
+# Prompts typed into Claude Code. Each hands the review of the current PR to a
+# second agent in a background herdr tab, then works its findings back into the
+# PR from here.
 #
 # NOTE: espanso fires a trigger the instant its exact characters are typed, with
-# no lookahead — so no trigger here may be a prefix of another. That is why the
-# second one is `:claude-monitor`, not `:claude-review-monitor`.
+# no lookahead — so no trigger here may be a prefix of another. `:revcl` and
+# `:revco` share a prefix but neither contains the other, so both are safe.
 
 matches:
-  # Kick off a review of a PR, posted back to the PR itself. The bare number
-  # targets the PR rather than the working tree; --comment posts findings as
-  # inline PR comments.
-  - trigger: ":claude-review"
-    form: "/code-review [[num]] --comment"
+  # Review by Claude. The bare PR number targets the PR rather than the working
+  # tree; --comment posts findings as inline PR comments.
+  - trigger: ":revcl"
+    replace: >-
+      open a background herdr tab and have claude review the current PR:
+      `/code-review <pr#> --comment`. Don't have it modify files; take its
+      findings, determine which are actionable, and address them in the PR.
+      Reply to its comments with the resolution or why no action was taken.
+      When the review is complete, close the background herdr tab.
 
-  # Hand the waiting-and-responding half to a second agent.
-  - trigger: ":claude-monitor"
-    form: "pr#[[num]] is being reviewed by claude. it will post review as comments to the PR. it may take up to 20 minutes - monitor the PR and address its comments as necessary once they are available"
+  # Same, by Codex — its /review has no comment flag, so ask for PR comments.
+  - trigger: ":revco"
+    replace: >-
+      open a background herdr tab and have codex review the current PR:
+      `/review`, putting its findings as PR comments. Don't have it modify
+      files; take its findings, determine which are actionable, and address
+      them in the PR. Reply to its comments with the resolution or why no
+      action was taken. When the review is complete, close the background
+      herdr tab.

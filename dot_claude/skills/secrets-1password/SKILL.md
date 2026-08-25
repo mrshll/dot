@@ -56,32 +56,42 @@ On serveserve, `passh` talks to `127.0.0.1:18340`. That port is a
 `RemoteForward` carried by the SSH session the human opened from their Mac, and
 it reaches a small daemon (`passhd`) running there under launchd.
 
-The consequence worth knowing: **vault access exists only while that SSH
-session is open.** If the human disconnects or the Mac sleeps, `passh` stops
-working, by design. Background jobs and cron on serveserve cannot use it. This
-is a deliberate limit on how long the server can reach the vaults, not an
-oversight — do not try to route around it with a service-account token.
+When there is no tunnel — the human is on a phone SSH client, their Mac is
+asleep, or (easy to miss) this `tmux` session has outlived the SSH session that
+carried the forward — `passh` falls back to running `op` here instead, and says
+so on stderr.
+
+**That fallback authenticates with the human's 1Password password, not Touch
+ID.** If you see `You are not currently signed in`, stop and tell them to run
+`eval $(op signin)` in their own shell. Never attempt to supply, guess, or
+prompt for that password yourself, and never put it in a command line.
 
 Failure modes:
 
 - `cannot connect to 1Password app` — you used bare `op`. Use `passh`.
-- `cannot reach passhd on 127.0.0.1:18340` — the human's SSH session is closed
-  or their Mac is asleep. Nothing on the server can fix this; say so and stop.
+- `no tunnel to the laptop ... Falling back` — expected on mobile or a
+  disconnected Mac. Not an error by itself; keep going unless it then reports
+  not being signed in.
+- `You are not currently signed in` — the human must run `eval $(op signin)`.
+  Say so and stop.
 - `the Mac rejected our token` — `~/.config/passh/token` drifted from the Mac's
   copy. The human needs to re-copy it.
 - A few seconds' pause on first use is Touch ID waiting on the Mac.
   Authorization is cached until the 1Password app relocks, so later calls are
-  instant.
+  instant. If it hangs much longer, a prompt is sitting unanswered on their
+  Mac — say so rather than retrying in a loop.
 
 Run `passh doctor` to see mode, tunnel reachability, and which accounts are
 reachable.
 
 ## Blocked on purpose
 
-`passh` refuses `service-account`, `signin`, `signout`, `account add`,
-`account forget`, `update`, and `completion`. `passhd` refuses them again on
-the Mac, which is the enforcement that counts — the client runs on the machine
-being protected against, so its checks are only a convenience.
+On the tunnel path `passh` refuses `service-account`, `signin`, `signout`,
+`account add`, `account forget`, `update`, and `completion`. `passhd` refuses
+them again on the Mac, which is the enforcement that counts — the client runs
+on the machine being protected against, so its checks are only a convenience.
+The fallback path does not block them, since local `op` protects nothing that
+running `op` directly would not already expose.
 
 These would let anyone with shell access on the server mint a durable
 credential or repoint the CLI at another account, defeating the point: no

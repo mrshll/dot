@@ -68,10 +68,11 @@ Add `--account upstreamtech` for work vaults. Never use `passh read` or
 `op item get` to pull a secret into the terminal — it lands in the transcript.
 To prove a value resolved, check `${#VAR}`, not the value.
 
-Vault access from serveserve exists only while my SSH session is open — if
-`passh` reports it cannot reach passhd, my Mac is asleep or disconnected. Say
-so and stop; don't route around it with a service-account token. `passh doctor`
-diagnoses the link.
+If `passh` reports no tunnel, it falls back to local `op`, which needs my
+1Password *password* rather than Touch ID. On `You are not currently signed
+in`, tell me to run `eval $(op signin)` — never try to supply that password
+yourself. Don't route around any of this with a service-account token.
+`passh doctor` diagnoses the link.
 
 ## Infrastructure
 
