@@ -14,17 +14,20 @@ matches:
   - trigger: ":revcl"
     replace: >-
       open a background herdr tab and have claude review the current PR:
-      `/code-review <pr#> --comment`. Don't have it modify files; take its
-      findings, determine which are actionable, and address them in the PR.
-      Reply to its comments with the resolution or why no action was taken.
-      When the review is complete, close the background herdr tab.
+      `/code-review <pr#> --comment`. Pass it this guidance: review only —
+      report findings as comments and leave the fixes to me, since I'm
+      applying them from here. Take its findings, determine which are
+      actionable, and address them in the PR. Reply to its comments with the
+      resolution or why no action was taken. When the review is complete,
+      close the background herdr tab.
 
   # Same, by Codex — its /review has no comment flag, so ask for PR comments.
   - trigger: ":revco"
     replace: >-
       open a background herdr tab and have codex review the current PR:
-      `/review`, putting its findings as PR comments. Don't have it modify
-      files; take its findings, determine which are actionable, and address
-      them in the PR. Reply to its comments with the resolution or why no
-      action was taken. When the review is complete, close the background
-      herdr tab.
+      `/review`, putting its findings as PR comments. Pass it this guidance:
+      review only — report findings as comments and leave the fixes to me,
+      since I'm applying them from here. Take its findings, determine which
+      are actionable, and address them in the PR. Reply to its comments with
+      the resolution or why no action was taken. When the review is complete,
+      close the background herdr tab.
