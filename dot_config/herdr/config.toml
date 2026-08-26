@@ -9,9 +9,9 @@ next_workspace = "ctrl+alt+l"
 previous_agent = "ctrl+alt+k"
 next_agent = "ctrl+alt+j"
 
-# Lantern (aigora.lantern plugin). prefix+h is "focus pane left", so capital H.
+# Herdr Meta supervisor. prefix+h is "focus pane left", so capital H.
 [[keys.command]]
 key = "prefix+H"
 type = "plugin_action"
-command = "aigora.lantern.open"
-description = "Open lantern"
+command = "mrshll.herdr-meta.open"
+description = "Open Codex supervisor"
