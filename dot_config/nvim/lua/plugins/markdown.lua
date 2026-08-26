@@ -1,3 +1,40 @@
+-- Treesitter's markdown_inline query conceals the brackets and destination of
+-- inline links and images, so `[text](url)` reads as `text` until the cursor
+-- lands on the line and the raw form pops back open. Drop just those two
+-- conceal patterns so destinations stay put; emphasis and code-span concealing
+-- are left alone.
+local function show_link_destinations()
+  local lang, name = "markdown_inline", "highlights"
+  local chunks = {}
+  for _, file in ipairs(vim.treesitter.query.get_files(lang, name)) do
+    chunks[#chunks + 1] = table.concat(vim.fn.readfile(file), "\n")
+  end
+  if #chunks == 0 then
+    return
+  end
+
+  local text = table.concat(chunks, "\n")
+  local inline_conceal = '%(inline_link%s*%[.-%]%s*@markup%.link%s*%(#set! conceal ""%)%)'
+  local image_conceal = '%(image%s*%[.-%]%s*@markup%.link%s*%(#set! conceal ""%)%)'
+
+  local patched, inline_hits = text:gsub(inline_conceal, "")
+  local image_hits
+  patched, image_hits = patched:gsub(image_conceal, "")
+  if inline_hits + image_hits == 0 then
+    -- Upstream query changed shape; leave it be rather than guess.
+    return
+  end
+
+  pcall(vim.treesitter.query.set, lang, name, patched)
+end
+
+vim.api.nvim_create_autocmd("FileType", {
+  group = vim.api.nvim_create_augroup("markdown_show_links", { clear = true }),
+  pattern = { "markdown", "markdown.mdx" },
+  once = true,
+  callback = show_link_destinations,
+})
+
 return {
   -- Calmer markdown rendering: keep the structure cues, drop the noise.
   {

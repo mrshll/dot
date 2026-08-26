@@ -5,7 +5,6 @@ setup/
 {{ if ne .chezmoi.os "darwin" }}
 .config/kitty
 .config/espanso
-.codex/config.toml
 {{ end }}
 
 # passhd and its launch agent are macOS-only: the Mac is the machine with the
@@ -21,6 +20,10 @@ Library
 # lazy-lock.json and lazyvim.json are machine-local state
 .config/nvim/lazy-lock.json
 .config/nvim/lazyvim.json
+
+# Codex rewrites .codex/config.toml itself (model, UI mode, per-project trust
+# entries), so chezmoi can never hold it steady. Codex owns the file.
+.codex/config.toml
 
 # fish_variables are machine-local (color theme, universal vars)
 .config/fish/fish_variables
