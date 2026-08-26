@@ -44,3 +44,15 @@ set -g set-clipboard on
 
 # mouse support is enabled by default in oh-my-tmux
 set -g mouse on
+
+# yank the last command and its output into a paste buffer
+# (relies on the OSC 133 prompt marks emitted by fish/conf.d/osc133.fish)
+bind-key C-y {
+    copy-mode
+    send-keys -X previous-prompt
+    send-keys -X begin-selection
+    send-keys -X next-prompt
+    send-keys -X cursor-up
+    send-keys -X end-of-line
+    send-keys -X copy-selection-and-cancel
+}
