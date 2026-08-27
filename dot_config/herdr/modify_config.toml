@@ -1,0 +1,34 @@
+#!/bin/sh
+# herdr rewrites this file itself: `onboarding` and the [ui] block are state it
+# updates as you use the TUI, so a plain managed file drifted on every machine
+# and made `chezmoi apply` stop on an interactive prompt. Only [keys] and below
+# are managed here; everything above [keys] is carried through from whatever
+# herdr last wrote.
+set -eu
+
+# stdin is the current target file, empty if it does not exist yet.
+state=$(sed '/^\[keys\]/,$d')
+
+if [ -z "$(printf '%s' "$state" | tr -d '[:space:]')" ]; then
+    state='onboarding = false
+[ui]
+agent_panel_sort = "spaces"'
+fi
+
+printf '%s\n\n' "$state"
+
+cat <<'TOML'
+[keys]
+# Direct cycling between spaces and agents.
+previous_workspace = "ctrl+alt+h"
+next_workspace = "ctrl+alt+l"
+previous_agent = "ctrl+alt+k"
+next_agent = "ctrl+alt+j"
+
+# Herdr Meta supervisor. prefix+h is "focus pane left", so capital H.
+[[keys.command]]
+key = "prefix+H"
+type = "plugin_action"
+command = "mrshll.herdr-meta.open"
+description = "Open Codex supervisor"
+TOML

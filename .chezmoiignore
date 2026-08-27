@@ -25,6 +25,11 @@ Library
 # entries), so chezmoi can never hold it steady. Codex owns the file.
 .codex/config.toml
 
+# conf.d/local.fish is the untracked escape hatch for machine-specific shell
+# bits not worth committing (version-pinned installer paths, experiments).
+# The tracked counterpart is conf.d/machine.fish.tmpl.
+.config/fish/conf.d/local.fish
+
 # fish_variables are machine-local (color theme, universal vars)
 .config/fish/fish_variables
 

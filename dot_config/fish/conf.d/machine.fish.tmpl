@@ -1,0 +1,14 @@
+# Machine-specific shell setup. This is the tracked half of the split: things
+# worth reproducing on a rebuild live here, keyed off the machine. Anything
+# version-pinned or throwaway belongs in conf.d/local.fish, which chezmoi
+# ignores.
+#
+# Installers for these tools append to config.fish by default; that file is a
+# chezmoi template, so their additions get reverted on the next apply. Move
+# them here instead.
+
+{{ if .is_server -}}
+# bun
+set --export BUN_INSTALL "$HOME/.bun"
+fish_add_path $BUN_INSTALL/bin
+{{ end -}}
