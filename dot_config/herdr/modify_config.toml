@@ -25,10 +25,10 @@ next_workspace = "ctrl+alt+l"
 previous_agent = "ctrl+alt+k"
 next_agent = "ctrl+alt+j"
 
-# Herdr Meta supervisor. prefix+h is "focus pane left", so capital H.
+# Slack-registered Herdr Meta supervisor. prefix+h is "focus pane left", so capital H.
 [[keys.command]]
 key = "prefix+H"
 type = "plugin_action"
-command = "mrshll.herdr-meta.open"
-description = "Open Codex supervisor"
+command = "mrshll.herdr-meta-slack.open-codex"
+description = "Open Codex Slack supervisor"
 TOML
