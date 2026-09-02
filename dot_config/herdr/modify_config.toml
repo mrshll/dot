@@ -29,6 +29,6 @@ next_agent = "ctrl+alt+j"
 [[keys.command]]
 key = "prefix+H"
 type = "plugin_action"
-command = "mrshll.herdr-meta-slack.open-codex"
-description = "Open Codex Slack supervisor"
+command = "mrshll.herdr-meta-slack.open-claude"
+description = "Open Claude Slack supervisor"
 TOML
