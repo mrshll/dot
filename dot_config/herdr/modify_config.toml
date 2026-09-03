@@ -32,9 +32,9 @@ type = "plugin_action"
 command = "mrshll.herdr-meta-slack.open-claude"
 description = "Open Claude Slack supervisor"
 
+# One row per agent. herdr-meta reports a display agent of "◆ <name>" for the
+# agents marsh talks to and "↳ <role> · <model>" for their helpers, so under the
+# grouped sort the panel reads as a tree without repeating the workspace label.
 [ui.sidebar.agents]
-rows = [
-  ["state_icon", "workspace", "tab"],
-  [{ token = "$owner", dim = true }, "agent"],
-]
+rows = [["state_icon", "agent"]]
 TOML
