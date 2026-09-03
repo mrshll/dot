@@ -34,7 +34,7 @@ description = "Open Claude Slack supervisor"
 
 [ui.sidebar.agents]
 rows = [
-  ["state_icon", { token = "$role", bold = true }, "workspace", "tab"],
+  ["state_icon", "workspace", "tab"],
   [{ token = "$owner", dim = true }, "agent"],
 ]
 TOML
