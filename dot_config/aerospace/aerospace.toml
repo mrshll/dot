@@ -112,8 +112,26 @@ alt-shift-0 = 'move-node-to-workspace 10'
 # --- layout -----------------------------------------------------------------
 alt-tab = 'workspace-back-and-forth'
 alt-f = 'fullscreen'
-alt-slash = 'layout tiles horizontal vertical'
-alt-comma = 'layout accordion horizontal vertical'
+# i3's `layout toggle all` has no direct analogue. AeroSpace has no tabbed or
+# stacking layout, and `layout` is a two-state toggle rather than a cycle --
+# arguments past the first two are ignored (verified: `layout h_tiles v_tiles
+# h_accordion v_accordion` only ever flips h_tiles <-> v_tiles).
+#
+# So the four states are reached with two orthogonal toggles instead, which
+# needs at most two keystrokes rather than i3's up-to-three cycling:
+#
+#   family \ orientation    horizontal      vertical
+#   tiles                   h_tiles         v_tiles        i3 splith / splitv
+#   accordion               h_accordion     v_accordion    i3 tabbed / stacking
+#
+# accordion is the stacking/tabbed analogue -- unfocused windows collapse to
+# slivers sized by accordion-padding above.
+#
+# This replaces the shipped defaults, whose alt-comma
+# ('layout accordion horizontal vertical') just toggled orientation again and
+# so duplicated alt-slash.
+alt-slash = 'layout horizontal vertical'
+alt-comma = 'layout tiles accordion'
 alt-shift-space = 'layout floating tiling'
 alt-shift-q = 'close'
 alt-shift-c = 'reload-config'
