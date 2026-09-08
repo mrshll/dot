@@ -19,14 +19,15 @@
 #   alt+l    was downcase-word
 #   alt+1..9 was digit-argument
 #   alt+/    was complete-filename
-#   alt+f    was forward-word  <- given up deliberately to keep i3's mod+f
-#                                 for fullscreen. backward-word on alt+b
-#                                 still works, so word motion is one-sided
-#                                 in readline; alt+arrow is the way back.
+#   alt+f    was forward-word   <- given up to keep i3's mod+f (fullscreen).
+#                                  backward-word on alt+b still works, so
+#                                  word motion is one-sided in readline;
+#                                  alt+arrow is the way back.
+#   alt+r    was revert-line    <- given up to keep i3's mod+r (resize mode).
+#                                  Rarely used, and ctrl+_ undoes a line edit.
 # Deliberately NOT bound, so they keep working: alt+b (backward-word),
-# alt+d (kill-word), alt+r (revert-line), alt+t (transpose-word),
-# alt+. (yank-last-arg). Resize mode is alt+g rather than i3's mod+r for
-# the same reason alt+f was originally avoided; say the word and it moves.
+# alt+d (kill-word), alt+t (transpose-word), alt+. (yank-last-arg).
+# The ladder now matches i3 on every binding it shares with it.
 #
 # alt+space is intentionally absent: Raycast owns it, which is exactly
 # i3's $mod+d launcher slot. espanso's search bar is disabled to match
@@ -117,8 +118,8 @@ alt-shift-space = 'layout floating tiling'
 alt-shift-q = 'close'
 alt-shift-c = 'reload-config'
 
-# --- resize mode (i3 $mod+r, moved to g) ------------------------------------
-alt-g = 'mode resize'
+# --- resize mode (i3 $mod+r) ------------------------------------------------
+alt-r = 'mode resize'
 alt-shift-semicolon = 'mode service'
 
 [mode.resize.binding]
@@ -132,6 +133,7 @@ up = 'resize height -50'
 right = 'resize width +50'
 enter = 'mode main'
 esc = 'mode main'
+alt-r = 'mode main'
 
 # --- service mode -----------------------------------------------------------
 # join-with is AeroSpace's equivalent of i3's mod+v / mod+h split: it decides
