@@ -28,6 +28,10 @@
 # i3's $mod+d launcher slot. espanso's search bar is disabled to match
 # (see dot_config/espanso/config/default.yml).
 
+# Mandatory. Omitting this key falls back to config-version = 1, which does not
+# parse this file. See nikitabobko.github.io/AeroSpace/guide#config-version
+config-version = 2
+
 after-login-command = []
 after-startup-command = []
 start-at-login = true
@@ -86,6 +90,7 @@ alt-6 = 'workspace 6'
 alt-7 = 'workspace 7'
 alt-8 = 'workspace 8'
 alt-9 = 'workspace 9'
+alt-0 = 'workspace 10'
 
 # --- send to workspace (i3 $mod+Shift+1..9) ---------------------------------
 alt-shift-1 = 'move-node-to-workspace 1'
@@ -97,6 +102,7 @@ alt-shift-6 = 'move-node-to-workspace 6'
 alt-shift-7 = 'move-node-to-workspace 7'
 alt-shift-8 = 'move-node-to-workspace 8'
 alt-shift-9 = 'move-node-to-workspace 9'
+alt-shift-0 = 'move-node-to-workspace 10'
 
 # --- layout -----------------------------------------------------------------
 alt-tab = 'workspace-back-and-forth'
@@ -109,11 +115,29 @@ alt-shift-c = 'reload-config'
 
 # --- resize mode (i3 $mod+r, moved to g) ------------------------------------
 alt-g = 'mode resize'
+alt-shift-semicolon = 'mode service'
 
 [mode.resize.binding]
 h = 'resize width -50'
 j = 'resize height +50'
 k = 'resize height -50'
 l = 'resize width +50'
+left = 'resize width -50'
+down = 'resize height +50'
+up = 'resize height -50'
+right = 'resize width +50'
 enter = 'mode main'
 esc = 'mode main'
+
+# --- service mode -----------------------------------------------------------
+# join-with is AeroSpace's equivalent of i3's mod+v / mod+h split: it decides
+# which container a window joins rather than splitting one in place.
+[mode.service.binding]
+esc = ['reload-config', 'mode main']
+r = ['flatten-workspace-tree', 'mode main']
+f = ['layout floating tiling', 'mode main']
+backspace = ['close-all-windows-but-current', 'mode main']
+alt-shift-h = ['join-with left', 'mode main']
+alt-shift-j = ['join-with down', 'mode main']
+alt-shift-k = ['join-with up', 'mode main']
+alt-shift-l = ['join-with right', 'mode main']
