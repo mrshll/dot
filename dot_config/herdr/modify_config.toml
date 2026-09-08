@@ -32,9 +32,16 @@ type = "plugin_action"
 command = "mrshll.herdr-meta-slack.open-claude"
 description = "Open Claude Slack supervisor"
 
-# One row per agent. herdr-meta reports a display agent of "◆ <name>" for the
-# agents marsh talks to and "↳ <role> · <model>" for their helpers, so under the
-# grouped sort the panel reads as a tree without repeating the workspace label.
+# One row per agent. herdr-meta names the pane "◆ <name>" on the agents marsh
+# talks to, which "Rename pane" in the UI also sets, and reports a `sub` token
+# of "↳ <role> · <model>" on their helpers, so under the grouped sort the
+# panel reads as a tree: pane names in white, helpers in the default colour,
+# the kind dim after.
 [ui.sidebar.agents]
-rows = [["state_icon", "agent"]]
+rows = [[
+  "state_icon",
+  { token = "pane", fg = "#ffffff", dim = false },
+  { token = "$sub", dim = false },
+  { token = "agent", dim = true },
+]]
 TOML
