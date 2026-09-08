@@ -30,7 +30,9 @@ cd ~/workspace/dot
 ./setup/sync.sh
 ```
 
-This pulls, commits local changes, installs missing packages (`Brewfile` on Mac, `install.sh` on Linux), pushes, runs `chezmoi apply` locally, then SSHes into each remote and does the same.
+This first SSHes into each remote to commit and push any edits made there, then pulls, commits local changes, installs missing packages (`Brewfile` on Mac, `install.sh` on Linux), pushes, runs `chezmoi apply` locally, and finally pulls and applies on each remote. A remote that is the current machine is skipped, so the script can run from any listed host; edits applied on a remote are never left uncommitted.
+
+Run it from the Mac: the Mac is not SSH-reachable from the server (Remote Login is off), so a run on serveserve commits, pushes, and applies there but cannot apply on the Mac. Herdr 0.9 draws the sidebar on the viewing client, so Herdr UI changes only show once the Mac has applied them and the client has reloaded its config.
 
 ## What's managed
 
