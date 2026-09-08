@@ -4,3 +4,6 @@
 # OS junk
 .DS_Store
 Thumbs.db
+
+# Working plans (live in the PR description once ready)
+plans/
