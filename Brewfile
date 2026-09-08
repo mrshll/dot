@@ -31,6 +31,11 @@ brew "imagemagick"
 brew "overmind"
 
 # Apps
+# AeroSpace is an i3-like tiling WM; it lives in a third-party tap, which
+# Homebrew now requires an explicit one-time trust for:
+#   brew tap nikitabobko/tap && brew trust nikitabobko/tap
+tap "nikitabobko/tap"
+cask "nikitabobko/tap/aerospace"
 cask "1password-cli"
 cask "espanso"
 cask "google-chrome"

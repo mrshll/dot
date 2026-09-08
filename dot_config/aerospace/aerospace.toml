@@ -1,0 +1,119 @@
+# AeroSpace — the OS layer of the keyboard ladder.
+#
+# One ladder, one meaning per key, at every depth:
+#
+#   depth              modifier   hjkl              1..9
+#   ---------------------------------------------------------------
+#   OS windows         alt        focus window      switch workspace
+#   OS windows (move)  alt+shift  move window       send to workspace
+#   herdr panes/tabs   ctrl+alt   focus pane        switch workspace
+#   tmux               prefix     focus pane        switch window
+#
+# alt is $mod because that is what i3 uses and because a single-modifier
+# reach is the entire point. AeroSpace grabs these globally, which means
+# alt+hjkl and alt+1..9 never reach a terminal and never emit the macOS
+# dead-key characters (˙∆˚¬, ¡™£) they otherwise would.
+#
+# What that costs inside readline REPLs (python, psql, bash — fish is
+# unaffected for word motion, which lives on alt+arrow there):
+#   alt+l    was downcase-word
+#   alt+1..9 was digit-argument
+#   alt+/    was complete-filename
+# Deliberately NOT bound, so they keep working: alt+f and alt+b (word
+# motion), alt+d (kill-word), alt+r (revert-line), alt+t (transpose-word),
+# alt+. (yank-last-arg). That is why fullscreen is alt+m rather than i3's
+# mod+f, and resize mode is alt+g rather than i3's mod+r.
+#
+# alt+space is intentionally absent: Raycast owns it, which is exactly
+# i3's $mod+d launcher slot. espanso's search bar is disabled to match
+# (see dot_config/espanso/config/default.yml).
+
+after-login-command = []
+after-startup-command = []
+start-at-login = true
+
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+
+accordion-padding = 30
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+
+# Follow focus across monitors so the pointer lands where the keyboard went.
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+
+automatically-unhide-macos-hidden-apps = false
+
+[key-mapping]
+preset = 'qwerty'
+
+# Matches kitty's window_margin_width 4, so a tiled kitty and a tiled
+# anything-else line up on the same grid.
+[gaps]
+inner.horizontal = 4
+inner.vertical = 4
+outer.left = 4
+outer.bottom = 4
+outer.top = 4
+outer.right = 4
+
+[mode.main.binding]
+
+# --- launch -----------------------------------------------------------------
+# i3's $mod+Return. -n forces a new kitty window rather than raising the
+# existing one.
+alt-enter = 'exec-and-forget open -na kitty'
+
+# --- focus (i3 $mod+hjkl) ---------------------------------------------------
+alt-h = 'focus left'
+alt-j = 'focus down'
+alt-k = 'focus up'
+alt-l = 'focus right'
+
+# --- move (i3 $mod+Shift+hjkl) ----------------------------------------------
+alt-shift-h = 'move left'
+alt-shift-j = 'move down'
+alt-shift-k = 'move up'
+alt-shift-l = 'move right'
+
+# --- workspaces (i3 $mod+1..9) ----------------------------------------------
+alt-1 = 'workspace 1'
+alt-2 = 'workspace 2'
+alt-3 = 'workspace 3'
+alt-4 = 'workspace 4'
+alt-5 = 'workspace 5'
+alt-6 = 'workspace 6'
+alt-7 = 'workspace 7'
+alt-8 = 'workspace 8'
+alt-9 = 'workspace 9'
+
+# --- send to workspace (i3 $mod+Shift+1..9) ---------------------------------
+alt-shift-1 = 'move-node-to-workspace 1'
+alt-shift-2 = 'move-node-to-workspace 2'
+alt-shift-3 = 'move-node-to-workspace 3'
+alt-shift-4 = 'move-node-to-workspace 4'
+alt-shift-5 = 'move-node-to-workspace 5'
+alt-shift-6 = 'move-node-to-workspace 6'
+alt-shift-7 = 'move-node-to-workspace 7'
+alt-shift-8 = 'move-node-to-workspace 8'
+alt-shift-9 = 'move-node-to-workspace 9'
+
+# --- layout -----------------------------------------------------------------
+alt-tab = 'workspace-back-and-forth'
+alt-m = 'fullscreen'
+alt-slash = 'layout tiles horizontal vertical'
+alt-comma = 'layout accordion horizontal vertical'
+alt-shift-space = 'layout floating tiling'
+alt-shift-q = 'close'
+alt-shift-c = 'reload-config'
+
+# --- resize mode (i3 $mod+r, moved to g) ------------------------------------
+alt-g = 'mode resize'
+
+[mode.resize.binding]
+h = 'resize width -50'
+j = 'resize height +50'
+k = 'resize height -50'
+l = 'resize width +50'
+enter = 'mode main'
+esc = 'mode main'

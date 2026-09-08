@@ -19,13 +19,32 @@ printf '%s\n\n' "$state"
 
 cat <<'TOML'
 [keys]
-# Direct cycling between spaces and agents.
-previous_workspace = "ctrl+alt+h"
-next_workspace = "ctrl+alt+l"
-previous_agent = "ctrl+alt+k"
-next_agent = "ctrl+alt+j"
+# One rung of the keyboard ladder (see dot_config/aerospace/aerospace.toml).
+# ctrl+alt is herdr's modifier, and it means the same thing here that alt
+# means one layer up: hjkl focuses directionally, 1..9 selects a workspace.
+# ctrl+alt is safe through the terminal and collides with nothing (Rectangle's
+# Todo mode sits on ctrl+alt+b / ctrl+alt+n, which miss this set).
+focus_pane_left = "ctrl+alt+h"
+focus_pane_down = "ctrl+alt+j"
+focus_pane_up = "ctrl+alt+k"
+focus_pane_right = "ctrl+alt+l"
+switch_workspace = "ctrl+alt+1..9"
 
-# Slack-registered Herdr Meta supervisor. prefix+h is "focus pane left", so capital H.
+# prefix+hjkl is freed up by the above (it defaulted to pane focus), so it
+# takes over the *cycling* variants: h/l steps workspaces, j/k steps agents.
+# This is the pre-ladder ctrl+alt+hjkl behaviour, moved one rung inward.
+previous_workspace = "prefix+h"
+next_workspace = "prefix+l"
+previous_agent = "prefix+k"
+next_agent = "prefix+j"
+
+# Everything else stays on the prefix (ctrl+b) defaults: splits, tabs,
+# worktrees, detach. Note tmux also prefixes on ctrl+b — herdr consumes it as
+# the outer app, and a nested tmux answers oh-my-tmux's prefix2 ctrl+a
+# instead (~/.tmux.conf:27 binds C-a send-prefix -2).
+
+# Slack-registered Herdr Meta supervisor. prefix+h now steps workspaces, so
+# this stays on capital H.
 [[keys.command]]
 key = "prefix+H"
 type = "plugin_action"
