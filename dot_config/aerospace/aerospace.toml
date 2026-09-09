@@ -111,6 +111,13 @@ alt-shift-0 = 'move-node-to-workspace 10'
 
 # --- layout -----------------------------------------------------------------
 alt-tab = 'workspace-back-and-forth'
+
+# i3's `move workspace to output`. Two displays here (Built-in Retina and the
+# DELL U3415W), so next/prev cycling is enough and beats naming a direction.
+# --wrap-around makes it a straight toggle rather than stopping at the end.
+# Pairs with alt-tab above: alt-tab moves you between workspaces, alt-shift-tab
+# moves the workspace itself.
+alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
 alt-f = 'fullscreen'
 # i3's `layout toggle all` has no direct analogue. AeroSpace has no tabbed or
 # stacking layout, and `layout` is a two-state toggle rather than a cycle --
