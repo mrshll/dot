@@ -172,3 +172,27 @@ alt-shift-h = ['join-with left', 'mode main']
 alt-shift-j = ['join-with down', 'mode main']
 alt-shift-k = ['join-with up', 'mode main']
 alt-shift-l = ['join-with right', 'mode main']
+
+# Workspaces 6-10 live on the ultrawide, 1-5 on the laptop screen. AeroSpace
+# restores this whenever the monitor is connected, so the split survives
+# undocking and redocking without being rebuilt by hand.
+#
+# The key is the workspace name, not the keycap: alt-0 switches to workspace
+# "10", so the last entry is 10 rather than 0.
+#
+# Matched by name rather than by index (indices shuffle on reconnect) with an
+# explicit fallback: when the DELL is unplugged these fall back to the main
+# display instead of vanishing.
+#
+# Note this overrides alt-shift-tab (move-workspace-to-monitor): AeroSpace
+# refuses to move a force-assigned workspace, with
+#   "Can't move workspace '6' to monitor '...'.
+#    workspace-to-monitor-force-assignment doesn't allow it"
+# So alt-shift-tab is inert on 6-10 by design and still works on 1-5, which
+# are deliberately left unassigned and free to roam.
+[workspace-to-monitor-force-assignment]
+6 = ['DELL', 'main']
+7 = ['DELL', 'main']
+8 = ['DELL', 'main']
+9 = ['DELL', 'main']
+10 = ['DELL', 'main']
