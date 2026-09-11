@@ -11,4 +11,11 @@
 # bun
 set --export BUN_INSTALL "$HOME/.bun"
 fish_add_path $BUN_INSTALL/bin
+
+# pytest guard: agents run several suites at once and `-n auto` runs have
+# deadlocked and sat resident for days. See ~/.config/pytest-local.
+set --export PYTEST_PLUGINS pytest_localguard
+if not contains $HOME/.config/pytest-local $PYTHONPATH
+    set --export --prepend PYTHONPATH $HOME/.config/pytest-local
+end
 {{ end -}}

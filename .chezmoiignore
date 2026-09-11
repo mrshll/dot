@@ -14,6 +14,11 @@ setup/
 Library
 {{ end }}
 
+# the pytest guard only makes sense on the shared server (see machine.fish.tmpl)
+{{ if not .is_server }}
+.config/pytest-local
+{{ end }}
+
 # espanso hub packages are installed with `espanso install`, not tracked here
 .config/espanso/match/packages
 
