@@ -7,3 +7,4 @@ Thumbs.db
 
 # Working plans (live in the PR description once ready)
 plans/
+__pycache__/
