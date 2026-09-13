@@ -46,10 +46,10 @@ reload_config = ""
 # the outer app, and a nested tmux answers oh-my-tmux's prefix2 ctrl+a
 # instead (~/.tmux.conf:27 binds C-a send-prefix -2).
 
-# Slack-registered Herdr Meta supervisor. prefix+h now steps workspaces, so
-# this stays on capital H.
+# Slack-registered Herdr Meta supervisor, on shift+s in herdr's canonical
+# spelling: "prefix+H" never fired from the Mac client.
 [[keys.command]]
-key = "prefix+H"
+key = "prefix+shift+s"
 type = "plugin_action"
 command = "mrshll.herdr-meta-slack.open-claude"
 description = "Open Claude Slack supervisor"
