@@ -38,6 +38,9 @@ next_workspace = "prefix+l"
 previous_agent = "prefix+k"
 next_agent = "prefix+j"
 
+# Reserve prefix+Shift+R for the supervisor refresh action below.
+reload_config = ""
+
 # Everything else stays on the prefix (ctrl+b) defaults: splits, tabs,
 # worktrees, detach. Note tmux also prefixes on ctrl+b — herdr consumes it as
 # the outer app, and a nested tmux answers oh-my-tmux's prefix2 ctrl+a
@@ -50,6 +53,12 @@ key = "prefix+H"
 type = "plugin_action"
 command = "mrshll.herdr-meta-slack.open-claude"
 description = "Open Claude Slack supervisor"
+
+[[keys.command]]
+key = "prefix+R"
+type = "plugin_action"
+command = "mrshll.herdr-meta.refresh"
+description = "Refresh supervisor with handoff"
 
 # One row per agent. herdr-meta names the pane "◆ <name>" on the agents marsh
 # talks to, which "Rename pane" in the UI also sets, and reports a `sub` token
