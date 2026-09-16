@@ -43,6 +43,7 @@ defaults='{
 
 enforced='{
   "attribution": { "commit": "", "pr": "" },
+  "promptSuggestionEnabled": false,
   "permissions": {
     "allow": [
       "Read",
