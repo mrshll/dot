@@ -83,25 +83,3 @@ yourself. Don't route around any of this with a service-account token.
 ## Dotfiles edits
 
 Never edit applied dotfiles in place (e.g. `~/.claude/*`, `~/.config/nvim/*`, `~/.gitconfig`). Always edit the chezmoi source in `~/workspace/dot/` (e.g. `dot_claude/`, `dot_config/nvim/`) and then run `~/workspace/dot/setup/sync.sh` to commit, push, and apply across all machines.
-
-## Kubernetes: kubectl-readonly-marsh-mutates
-
-Any agent looking at the cluster (pods, jobs, cronjobs, logs, events) must use the read-only context described in [dynamical-eks-3-low-permissions-kubeconfig](#kubernetes-reference-dynamical-eks-3-low-permissions-kubeconfig), never the admin kubeconfig or `AWS_PROFILE=dynamical`. Mutating commands (kubectl apply/create/delete/scale/suspend, `aws iam`, secret rotation, in-cluster jobs) are Marsh's to run: an agent prepares the exact command and hands it to him. Reading a Kubernetes Secret in any form (`kubectl get secret ... -o jsonpath/yaml/json`, `.data`, base64 -d) is forbidden for agents.
-
-**Why:** On 2026-09-17 reform-cape-rename ran `kubectl get secret aws-open-data-icechunk-storage-options-key -o jsonpath='{.data}'` expecting a key listing and printed the AWS access key id and secret into its transcript, forcing a key rotation. The low-permissions ServiceAccount cannot read secrets, exec, or modify anything, so using it makes that class of mistake impossible.
-
-**How to apply:** Put the low-permissions kubeconfig instruction in every orchestrator and helper briefing that may touch the cluster (agents inherit no PATH or kubeconfig; give the absolute path and both flags). When a step needs a mutation, the agent writes the manifest or command and the supervisor relays it to Marsh, as with the EC46 trim job on 2026-09-17. Adding this to herdr-meta prompt.md was proposed and not yet authorized as of 2026-09-17.
-
-## Kubernetes reference: dynamical-eks-3-low-permissions-kubeconfig
-
-Cluster `dynamical-eks-3`, region us-west-2. A `low-permissions` ServiceAccount in `kube-system` is bound to a ClusterRole with get/list/watch on pods, services, endpoints, configmaps, namespaces, nodes, PVs/PVCs, events, deployments/replicasets/statefulsets/daemonsets, jobs/cronjobs, ingresses/networkpolicies, plus get on pods/log. It cannot read secrets, exec into pods, or patch/update/delete anything (tested read-only). It authenticates with a static bearer token, so no IAM, SSO, or 1Password is needed.
-
-Usage, always with both flags explicit (no KUBECONFIG merging or aliases; in fish use a space, not `=`, so the tilde expands):
-
-```
-kubectl --kubeconfig ~/.kube/low-permissions.kubeconfig --context low-permissions get pods -n default
-```
-
-Setup: an admin (Alden or Marshall, via their own AWS SSO access) runs `aws eks describe-cluster --name dynamical-eks-3 --region us-west-2` for endpoint and CA, pulls the token from secret `low-permissions-token` in kube-system, and builds a kubeconfig with cluster `dynamical-eks-3`, context and user `low-permissions`, namespace default. The kubeconfig is a shared credential: never commit or paste it; revoking one copy means rotating the token for everyone; share it via 1Password only.
-
-Limits: no `kubectl top` (no metrics-server); no scaling, suspending, or deleting jobs. As of 2026-09-17 the file did not yet exist on serveserve; Marsh generates it. Policy for agents: [kubectl-readonly-marsh-mutates](#kubernetes-kubectl-readonly-marsh-mutates).
