@@ -46,6 +46,7 @@ enforced='{
   "promptSuggestionEnabled": false,
   "permissions": {
     "allow": [
+      "Bash(herdr:*)",
       "Read",
       "Bash(tree:*)",
       "Bash(mkdir:*)",
