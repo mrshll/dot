@@ -22,10 +22,28 @@ function listen --description "Stream music from MPD on serveserve"
 
     set -lx MPD_HOST $host
 
-    mpv --no-video --really-quiet "http://$host:8000/" >/dev/null 2>&1 &
-    set -l stream_pid $last_pid
+    # The audio stream is a separate port from MPD's control port: if only 6600
+    # answers, rmpc drives the library fine and playback is silent. Say so
+    # instead of leaving a dead mpv behind a /dev/null redirect.
+    set -l stream_pid
+    set -l stream_log (mktemp)
+    if nc -z -w2 $host 8000 2>/dev/null
+        mpv --no-video --msg-level=all=error "http://$host:8000/" >$stream_log 2>&1 &
+        set stream_pid $last_pid
+        sleep 1
+        if not kill -0 $stream_pid 2>/dev/null
+            echo "listen: stream player exited immediately:"
+            cat $stream_log
+            set stream_pid
+        end
+    else
+        echo "listen: no audio stream at $host:8000 — MPD's httpd output is down, continuing without sound"
+    end
 
     rmpc
 
-    kill $stream_pid 2>/dev/null
+    if test -n "$stream_pid"
+        kill $stream_pid 2>/dev/null
+    end
+    rm -f $stream_log
 end
