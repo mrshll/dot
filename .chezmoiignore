@@ -26,9 +26,6 @@ Library
 .config/nvim/lazy-lock.json
 .config/nvim/lazyvim.json
 
-# Codex rewrites .codex/config.toml itself (model, UI mode, per-project trust
-# entries), so chezmoi can never hold it steady. Codex owns the file.
-.codex/config.toml
 
 # conf.d/local.fish is the untracked escape hatch for machine-specific shell
 # bits not worth committing (version-pinned installer paths, experiments).

@@ -1,0 +1,26 @@
+#!/bin/sh
+# Preserve Codex-managed local state; manage only Cloudflare MCP entries.
+set -eu
+awk '
+/^\[/ {
+    skip = ($0 ~ /^\[mcp_servers\.(cloudflare|cloudflare-docs|cloudflare-bindings|cloudflare-builds|cloudflare-observability)(\]|\.)/)
+}
+!skip { print }
+'
+cat <<'TOML'
+
+[mcp_servers.cloudflare]
+url = "https://mcp.cloudflare.com/mcp"
+
+[mcp_servers.cloudflare-docs]
+url = "https://docs.mcp.cloudflare.com/mcp"
+
+[mcp_servers.cloudflare-bindings]
+url = "https://bindings.mcp.cloudflare.com/mcp"
+
+[mcp_servers.cloudflare-builds]
+url = "https://builds.mcp.cloudflare.com/mcp"
+
+[mcp_servers.cloudflare-observability]
+url = "https://observability.mcp.cloudflare.com/mcp"
+TOML
