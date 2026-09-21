@@ -8,7 +8,6 @@ awk '
 !skip { print }
 '
 cat <<'TOML'
-
 [mcp_servers.cloudflare]
 url = "https://mcp.cloudflare.com/mcp"
 
