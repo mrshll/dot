@@ -1,8 +1,9 @@
 function listen --description "Stream music from MPD on serveserve"
-    # Prefer the LAN name, fall back to the Tailscale IP (mirrors pond binaries).
+    # Prefer the Tailscale IP: serveserve.local resolves to global IPv6 records
+    # that intermittently have no route, which fails mpv and rmpc mid-session.
     set -l candidates
     if test -z "$POND_SERVER" -o "$POND_SERVER" = serveserve.local
-        set candidates serveserve.local 100.72.11.128
+        set candidates 100.72.11.128 serveserve.local
     else
         set candidates (string split ',' -- $POND_SERVER)
     end
