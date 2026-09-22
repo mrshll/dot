@@ -60,6 +60,24 @@ type = "plugin_action"
 command = "mrshll.herdr-meta.refresh"
 description = "Refresh supervisor with handoff"
 
+TOML
+
+# The Mac has no Radar publisher. Built-in labels also work when this client
+# views a remote server, without depending on optional metadata tokens.
+if [ "$(uname -s)" = Darwin ]; then
+    cat <<'TOML'
+[ui.sidebar.agents]
+row_gap = 1
+rows = [["state_icon", "workspace"], ["pane", "agent"]]
+
+[ui.sidebar.spaces]
+row_gap = 0
+rows = [["state_icon", "workspace"], ["branch", "git_status"]]
+TOML
+    exit 0
+fi
+
+cat <<'TOML'
 # Agents and Spaces rows come from herdr-radar (~/workspace/herdr-radar, a fork
 # of hhdebb/herdr-radar), dark palette, text logo variant. The block between the
 # markers is radar's own sidebarBlock('dark') output, carried here because the
