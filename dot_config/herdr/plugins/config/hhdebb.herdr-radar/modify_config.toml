@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+# macOS uses the text-glyph sidebar managed in our Herdr config. Prevent
+# Radar's appearance timer from rewriting the applied chezmoi file.
+if [ "$(uname -s)" != Darwin ]; then
+    cat
+    exit 0
+fi
+printf 'variant = "text"\nfollow_appearance = false\n'
+awk '
+    /^\[/ { in_table = 1 }
+    !in_table && /^[[:space:]]*(variant|follow_appearance)[[:space:]]*=/ { next }
+    { print }
+'
