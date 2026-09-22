@@ -46,14 +46,13 @@ reload_config = ""
 # the outer app, and a nested tmux answers oh-my-tmux's prefix2 ctrl+a
 # instead (~/.tmux.conf:27 binds C-a send-prefix -2).
 
-# Slack-registered Herdr Meta supervisor, on shift+s in herdr's canonical
-# spelling: "prefix+H" never fired from the Mac client. open-auto picks Claude
-# or Codex by orchestrator quota.
+# Herdr Meta owns supervisor launch and optional Slack registration.
+# Use the canonical shift spelling so the Mac client recognizes the binding.
 [[keys.command]]
 key = "prefix+shift+s"
 type = "plugin_action"
-command = "mrshll.herdr-meta-slack.open-auto"
-description = "Open routed Slack supervisor"
+command = "mrshll.herdr-meta.open"
+description = "Open supervisor"
 
 [[keys.command]]
 key = "prefix+R"
