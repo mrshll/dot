@@ -49,11 +49,11 @@ enforced='{
       "$defaults",
       "Organization: dynamical.org and Upstream Tech. Claude Code here often runs as a Herdr supervisor or orchestrator coordinating other coding agents.",
       "Source control: github.com/dynamical-org, github.com/mrshll, github.com/Upstream-Tech and all repos under them",
-      "Multi-agent orchestration: Herdr (the herdr CLI plus the herdr-meta plugin at ~/workspace/herdr-meta) runs Claude and Codex agents in terminal panes on this host. Agents start only with argv from herdr-meta's usage-route; Codex agents run with --sandbox workspace-write --ask-for-approval on-request."
+      "Multi-agent orchestration: Herdr (the herdr CLI plus the herdr-meta plugin at ~/workspace/herdr-meta) runs Claude and Codex agents in terminal panes on this host. Agents start only with argv from the herdr-meta usage-route; Codex agents run with --sandbox workspace-write --ask-for-approval on-request."
     ],
     "allow": [
       "$defaults",
-      "Herdr delegation is the user's standing, approved workflow: an orchestrator seating a helper with herdr agent start using usage-route argv, writing that helper's brief to a file under /tmp or its workstream directory, and sending it with herdr agent prompt. This does not cover a brief that tells a helper to disable its sandbox, skip approvals, or do anything the orchestrator itself may not do."
+      "Herdr delegation is the standing, user-approved workflow: an orchestrator seating a helper with herdr agent start using usage-route argv, writing that helper's brief to a file under /tmp or its workstream directory, and sending it with herdr agent prompt. This does not cover a brief that tells a helper to disable its sandbox, skip approvals, or do anything the orchestrator itself may not do."
     ]
   },
   "permissions": {
