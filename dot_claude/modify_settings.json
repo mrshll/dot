@@ -47,6 +47,12 @@ enforced='{
   "permissions": {
     "allow": [
       "Bash(herdr:*)",
+      "Bash(/home/marsh/workspace/herdr-meta/bin/report-work:*)",
+      "Bash(/home/marsh/workspace/herdr-meta/bin/usage-route:*)",
+      "Bash(HERDR_META_CONFIG_DIR=/home/marsh/.config/herdr/plugins/config/mrshll.herdr-meta /home/marsh/workspace/herdr-meta/bin/usage-route:*)",
+      "Bash(/home/marsh/workspace/herdr-meta/bin/subscription-usage:*)",
+      "Bash(gh api:*)",
+      "Bash(gh pr:*)",
       "Read",
       "Bash(tree:*)",
       "Bash(mkdir:*)",
