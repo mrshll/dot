@@ -53,7 +53,7 @@ enforced='{
     ],
     "allow": [
       "$defaults",
-      "Herdr delegation is the standing, user-approved workflow: an orchestrator seating a helper with herdr agent start using usage-route argv, writing that helper's brief to a file under /tmp or its workstream directory, and sending it with herdr agent prompt. This does not cover a brief that tells a helper to disable its sandbox, skip approvals, or do anything the orchestrator itself may not do."
+      "Herdr delegation is the standing, user-approved workflow: an orchestrator seating a helper with herdr agent start using usage-route argv, writing the brief for that helper to a file under /tmp or its workstream directory, and sending it with herdr agent prompt. This does not cover a brief that tells a helper to disable its sandbox, skip approvals, or do anything the orchestrator itself may not do."
     ]
   },
   "permissions": {
