@@ -1,0 +1,19 @@
+# Git identity for agents acting as Marsh's GitHub machine account,
+# mrshll-agent. Not read by default: ~/.local/bin/as-agent points
+# GIT_CONFIG_GLOBAL here for the commands it runs. Everything else, including
+# the gh credential helper, comes from Marsh's own config.
+[include]
+	path = ~/.gitconfig
+[user]
+	name = mrshll-agent
+	email = 337028807+mrshll-agent@users.noreply.github.com
+	signingkey = {{ .chezmoi.homeDir }}/.ssh/mrshll_agent_signing_ed25519
+[gpg]
+	format = ssh
+[commit]
+	gpgsign = true
+{{/* An SSH remote would push with Marsh's own key, as mrshll. Over HTTPS the
+     credential helper hands git the agent's GH_TOKEN instead. */ -}}
+[url "https://github.com/"]
+	insteadOf = git@github.com:
+	insteadOf = ssh://git@github.com/

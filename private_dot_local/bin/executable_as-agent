@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Run a command as Marsh's GitHub machine account, mrshll-agent: gh and git
+# pushes authenticate with its token, and commits are authored and signed as it.
+#
+#   as-agent <command> [args...]
+#
+# The token comes from 1Password through passh and lives only in the command's
+# environment. gh reads a config directory with no stored login, so a missing
+# token can never fall back to Marsh's own. Fails instead of prompting for a
+# password when the tunnel to the laptop is down.
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+    printf 'usage: as-agent <command> [args...]\n' >&2
+    exit 64
+fi
+
+gitconfig=$HOME/.config/git/agent.gitconfig
+ghconfig=$HOME/.config/gh-agent
+for needed in "$gitconfig" "$ghconfig" "$HOME/.ssh/mrshll_agent_signing_ed25519"; do
+    [ -e "$needed" ] || { printf 'as-agent: missing %s\n' "$needed" >&2; exit 1; }
+done
+
+export GIT_CONFIG_GLOBAL=$gitconfig GH_CONFIG_DIR=$ghconfig
+# Nothing inherited may name another identity or credential, and git must fail
+# rather than ask for one.
+unset GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN \
+    GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL EMAIL \
+    GIT_ASKPASS SSH_ASKPASS
+export GIT_TERMINAL_PROMPT=0
+PASSH_NO_FALLBACK=1 exec passh run \
+    --env-file=<(printf '%s\n' 'GH_TOKEN=op://Private/Github agent/Token') \
+    -- env -u PASSH_NO_FALLBACK "$@"
