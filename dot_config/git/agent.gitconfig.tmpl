@@ -1,17 +1,36 @@
-# Git identity for agents acting as Marsh's GitHub machine account,
+# Git config for agents acting as Marsh's GitHub machine account,
 # mrshll-agent. Not read by default: ~/.local/bin/as-agent points
-# GIT_CONFIG_GLOBAL here for the commands it runs. Everything else, including
-# the gh credential helper, comes from Marsh's own config.
-[include]
-	path = ~/.gitconfig
+# GIT_CONFIG_GLOBAL here for the commands it runs. It stands alone rather than
+# including ~/.gitconfig, so nothing added there later (a credential, a URL
+# rewrite, an identity) can act as Marsh from an agent's shell. Herdr Meta's
+# seat check trusts this file and flags those settings anywhere else.
+{{- $gh := ternary "/opt/homebrew/bin/gh" "/usr/bin/gh" (eq .chezmoi.os "darwin") }}
 [user]
 	name = mrshll-agent
 	email = 337028807+mrshll-agent@users.noreply.github.com
 	signingkey = {{ .chezmoi.homeDir }}/.ssh/mrshll_agent_signing_ed25519
 [gpg]
 	format = ssh
+[gpg "ssh"]
+	allowedSignersFile = ~/.config/git/allowed_signers
 [commit]
 	gpgsign = true
+[push]
+	autoSetupRemote = true
+[init]
+	defaultBranch = main
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+{{/* gh hands git the agent's GH_TOKEN, since as-agent gives gh no stored login. */ -}}
+[credential "https://github.com"]
+	helper =
+	helper = !{{ $gh }} auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !{{ $gh }} auth git-credential
 {{/* An SSH remote would push with Marsh's own key, as mrshll. Over HTTPS the
      credential helper hands git the agent's GH_TOKEN instead. */ -}}
 [url "https://github.com/"]
