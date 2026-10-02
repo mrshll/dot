@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Act on GitHub as Marsh's machine account, mrshll-agent.
+#
+#   agent-gh <command> [args...]   e.g. agent-gh gh pr create, agent-gh git push
+#   agent-gh --setup               author and sign this checkout's commits as it
+#
+# The token comes from 1Password through passh into GH_TOKEN, which gh and its
+# git credential helper read. SSH GitHub remotes go over HTTPS for the command,
+# so a push can't use Marsh's SSH key. No token, no command: never Marsh's login.
+set -euo pipefail
+
+if [ "${1-}" = --setup ]; then
+    # Per worktree, so the main checkout and other worktrees keep their own.
+    git config extensions.worktreeConfig true
+    git config --worktree user.name mrshll-agent
+    git config --worktree user.email 337028807+mrshll-agent@users.noreply.github.com
+    git config --worktree user.signingkey "$HOME/.ssh/mrshll_agent_signing_ed25519"
+    git config --worktree gpg.format ssh
+    git config --worktree commit.gpgsign true
+    exit
+fi
+[ $# -gt 0 ] || { printf 'usage: agent-gh <command> [args...] | agent-gh --setup\n' >&2; exit 64; }
+
+unset GITHUB_TOKEN
+export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=2 \
+    GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_0=git@github.com: \
+    GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=ssh://git@github.com/
+PASSH_NO_FALLBACK=1 exec passh run \
+    --env-file=<(printf '%s\n' 'GH_TOKEN=op://Private/Github agent/Token') \
+    -- env -u PASSH_NO_FALLBACK "$@"
