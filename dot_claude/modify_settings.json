@@ -53,7 +53,8 @@ enforced='{
     ],
     "allow": [
       "$defaults",
-      "Herdr delegation is the standing, user-approved workflow: an orchestrator seating a helper with herdr agent start using usage-route argv, writing the brief for that helper to a file under /tmp or its workstream directory, and sending it with herdr agent prompt. This does not cover a brief that tells a helper to disable its sandbox, skip approvals, or do anything the orchestrator itself may not do."
+      "Herdr delegation is the standing, user-approved workflow: an orchestrator seating a helper with herdr agent start using usage-route argv, writing the brief for that helper to a file under /tmp or its workstream directory, and sending it with herdr agent prompt. This does not cover a brief that tells a helper to disable its sandbox, skip approvals, or do anything the orchestrator itself may not do.",
+      "GitHub writes as the machine account mrshll-agent (owned by Marsh) through agent-gh (opening, editing, closing and commenting on pull requests and issues, assigning and requesting review, pushing branches) are the user-approved workflow for agents, in any repository mrshll-agent can access. This does not cover merging pull requests, deleting branches or repositories, or changing repository settings."
     ]
   },
   "permissions": {
@@ -65,6 +66,7 @@ enforced='{
       "Bash(/home/marsh/workspace/herdr-meta/bin/subscription-usage:*)",
       "Bash(gh api:*)",
       "Bash(gh pr:*)",
+      "Bash(agent-gh:*)",
       "Read",
       "Bash(tree:*)",
       "Bash(mkdir:*)",
