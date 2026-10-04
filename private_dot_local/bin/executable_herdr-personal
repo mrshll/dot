@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Start or attach to the personal Herdr space (see herdr-space).
+exec herdr-space personal "$@"

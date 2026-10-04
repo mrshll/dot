@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Start (or attach to) a scoped Herdr session with its own Herdr Meta supervisor.
+#
+#   herdr-space upstream    # session "upstream", root ~/workspace/upstream
+#   herdr-space dynamical   # session "dynamical", root ~/workspace/dynamical-org
+#   herdr-space personal    # the default session, root ~/workspace
+#
+# On first attach it seats a supervisor in a "Herdr Meta" workspace, names the
+# agent "supervisor", and sends it the space's opening instructions. If the
+# session already has a supervisor it just attaches.
+set -euo pipefail
+
+space=${1:-}
+herdr_meta=$HOME/workspace/herdr-meta
+stock_config=$HOME/.config/herdr/plugins/config/mrshll.herdr-meta
+
+case $space in
+upstream)
+    session=upstream
+    root=$HOME/workspace/upstream
+    scope='Upstream Tech: the mono repo (~/workspace/mono, also linked as ./mono), Lens, Asana, and the "Upstream Tech" toad grouping (toad list --group="Upstream Tech"). Out of scope: dynamical.org and personal work.'
+    ;;
+dynamical)
+    session=dynamical
+    root=$HOME/workspace/dynamical-org
+    scope='dynamical.org: repos under ~/workspace/dynamical-org and the dynamical-org GitHub org, plus the "Dynamical" toad grouping (toad list --group=Dynamical). Out of scope: Upstream Tech (mono, Lens, Asana) and personal work.'
+    ;;
+personal)
+    session=default
+    root=$HOME/workspace
+    scope='Personal: everything under ~/workspace EXCEPT ~/workspace/dynamical-org and ~/workspace/upstream (and ~/workspace/mono), which have their own supervisors; plus the "Personal" and "House" toad groupings. Out of scope: dynamical.org and Upstream Tech work.'
+    ;;
+*)
+    printf 'usage: herdr-space upstream|dynamical|personal\n' >&2
+    exit 2
+    ;;
+esac
+
+if [ "$session" = default ]; then
+    socket=$HOME/.config/herdr/herdr.sock
+    config_dir=$stock_config
+    attach=(herdr)
+else
+    socket=$HOME/.config/herdr/sessions/$session/herdr.sock
+    config_dir=$HOME/.config/herdr-meta-spaces/$space
+    attach=(herdr --session "$session")
+    # Per-space Herdr Meta config: the stock config with this space's root.
+    if [ ! -f "$config_dir/config.yaml" ]; then
+        mkdir -p "$config_dir"
+        if [ -f "$stock_config/config.yaml" ]; then
+            grep -v '^roots:' "$stock_config/config.yaml" >"$config_dir/config.yaml" || :
+        fi
+        printf 'roots:\n  - %s\n' "$root" >>"$config_dir/config.yaml"
+    fi
+fi
+mkdir -p "$root"
+if [ "$space" = upstream ] && [ ! -e "$root/mono" ] && [ -d "$HOME/workspace/mono" ]; then
+    ln -s ../mono "$root/mono"
+fi
+
+inbox=/tmp/marsh-inbox-$space.md
+prompt="You are the $space supervisor (Herdr session \"$session\"). Scope — $scope Keep Marsh's inbox at $inbox (only items needing his input). Seat agents only for in-scope work; if something belongs to another space, tell Marsh which one instead of doing it."
+
+log_dir=$HOME/.local/state/herdr-space
+mkdir -p "$log_dir"
+log=$log_dir/$space.log
+
+h() { HERDR_SOCKET_PATH=$socket herdr "$@"; }
+
+# Seat a supervisor once the session's server answers. Runs in the background
+# so the attach below can start the server and show the session meanwhile.
+seed() {
+    local deadline=$((SECONDS + 60)) agents pane trust_deadline
+    until agents=$(h agent list 2>/dev/null); do
+        [ $SECONDS -lt $deadline ] || { echo "server never answered on $socket"; return 1; }
+        sleep 1
+    done
+    if printf '%s' "$agents" | jq -e '.result.agents[] | select(.name == "supervisor")' >/dev/null; then
+        echo "supervisor already present; nothing to seat"
+        return 0
+    fi
+    pane=$(h workspace create --cwd "$root" --label 'Herdr Meta' --no-focus |
+        jq -r '.result.root_pane.pane_id')
+    h pane rename "$pane" '◆ supervisor' >/dev/null
+    h pane run "$pane" env "HERDR_META_CONFIG_DIR=$config_dir" "$herdr_meta/launch.sh" >/dev/null
+    # Accept Claude's folder-trust prompt if it appears for a new root.
+    trust_deadline=$((SECONDS + 30))
+    while [ $SECONDS -lt $trust_deadline ]; do
+        if h pane read "$pane" --lines 20 2>/dev/null | grep -q 'trust this folder'; then
+            h pane send-keys "$pane" down >/dev/null
+            h pane send-keys "$pane" enter >/dev/null
+            break
+        fi
+        if h agent list 2>/dev/null |
+            jq -e --arg p "$pane" '.result.agents[] | select(.pane_id == $p and .interactive_ready == true)' >/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+    deadline=$((SECONDS + 90))
+    until h agent rename "$pane" supervisor >/dev/null 2>&1; do
+        [ $SECONDS -lt $deadline ] || { echo "no agent appeared in $pane"; return 1; }
+        sleep 2
+    done
+    h agent wait supervisor --until idle --timeout 120000 >/dev/null
+    h agent prompt supervisor "$prompt" >/dev/null
+    echo "seated supervisor in $pane"
+}
+
+if ! command -v jq >/dev/null; then
+    printf 'herdr-space: jq is required\n' >&2
+    exit 1
+fi
+(seed >>"$log" 2>&1 &)
+exec "${attach[@]}"
