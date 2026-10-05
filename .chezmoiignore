@@ -5,6 +5,7 @@ setup/
 {{ if ne .chezmoi.os "darwin" }}
 .config/kitty
 .config/espanso
+.local/bin/herdr-desk
 {{ end }}
 
 # passhd and its launch agent are macOS-only: the Mac is the machine with the

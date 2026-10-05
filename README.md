@@ -34,6 +34,20 @@ This first SSHes into each remote to commit and push any edits made there, then 
 
 Run it from the Mac: the Mac is not SSH-reachable from the server (Remote Login is off), so a run on serveserve commits, pushes, and applies there but cannot apply on the Mac. Herdr 0.9 draws the sidebar on the viewing client, so Herdr UI changes only show once the Mac has applied them and the client has reloaded its config.
 
+## Herdr desktop (Mac)
+
+Press **Alt+Shift+Enter** or run `herdr-desk` to arrange workspace 6 with
+three Kitty windows attached to serveserve's default, dynamical, and upstream
+herdr sessions in a vertical accordion on the left (2/3 width), and toad on
+the right (1/3). Existing launcher windows and an open toad window are reused.
+Use `herdr-desk NUMBER` to choose another workspace; unrelated windows on the
+destination are left alone and the launcher exits with an explanation.
+
+**Alt+J/K** switches herdr windows; **Alt+L** focuses toad and **Alt+H** returns
+to herdr. **Alt+6** returns to this workspace. Run the launcher again after
+changing monitors to restore the proportions. Closing Kitty detaches the
+herdr clients; remote agents keep running.
+
 ## What's managed
 
 | Target | Source | Notes |

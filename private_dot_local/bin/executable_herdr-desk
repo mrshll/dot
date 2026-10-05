@@ -1,0 +1,98 @@
+#!/bin/bash
+# Three remote herdr sessions in an AeroSpace accordion, beside toad.
+set -euo pipefail
+export PATH="/opt/homebrew/bin:$HOME/.local/bin:$PATH"
+
+workspace=${1:-6}
+staging="herdr-desk-$$"
+lock="${TMPDIR:-/tmp}/herdr-desk-$UID.lock"
+mkdir "$lock" 2>/dev/null || { echo 'herdr-desk is already running.' >&2; exit 1; }
+trap 'rmdir "$lock"' EXIT
+toad_state="${TMPDIR:-/tmp}/herdr-desk-$UID.toad"
+
+window_named() {
+    aerospace list-windows --all --format '%{window-id}|%{app-bundle-id}|%{window-title}' |
+        awk -F '|' -v title="$1" '$2 == "net.kovidgoyal.kitty" && $3 == title {print $1; exit}'
+}
+
+launch() {
+    local title=$1 command=$2 id attempt
+    id=$(window_named "$title")
+    if [ -z "$id" ]; then
+        open -na kitty --args --title "$title" /opt/homebrew/bin/fish -lc "$command; exec fish"
+        for ((attempt=0; attempt<100; attempt++)); do
+            id=$(window_named "$title")
+            [ -z "$id" ] || break
+            sleep 0.1
+        done
+    fi
+    [ -n "$id" ] || { echo "Timed out opening $title" >&2; exit 1; }
+    printf '%s\n' "$id"
+}
+
+toad=''
+if [ -f "$toad_state" ]; then
+    saved=$(cat "$toad_state")
+    toad=$(aerospace list-windows --all --format '%{window-id}|%{app-pid}|%{app-bundle-id}' |
+        awk -F '|' -v saved="$saved" '$0 == saved && $3 == "net.kovidgoyal.kitty" {print $1; exit}')
+fi
+if [ -z "$toad" ]; then
+    toad=$(aerospace list-windows --all --format '%{window-id}|%{app-bundle-id}|%{window-title}' |
+        awk -F '|' '$2 == "net.kovidgoyal.kitty" && $3 ~ /^toad( |$)/ {print $1; exit}')
+fi
+
+# Refuse to rearrange unrelated windows on the destination workspace.
+existing=$(aerospace list-windows --workspace "$workspace" --format '%{window-id}|%{app-bundle-id}|%{window-title}')
+if printf '%s\n' "$existing" | awk -F '|' -v toad="$toad" '
+    NF && !($2 == "net.kovidgoyal.kitty" && ($3 ~ /^herdr: (default|dynamical|upstream)$/ || $1 == toad)) { found=1 }
+    END { exit !found }'; then
+    echo "Workspace $workspace has unrelated windows. Choose an empty workspace: herdr-desk NUMBER" >&2
+    exit 1
+fi
+
+default=$(launch 'herdr: default' 'herdr --remote serveserve.local')
+dynamical=$(launch 'herdr: dynamical' 'herdr --remote serveserve.local --session dynamical')
+upstream=$(launch 'herdr: upstream' 'herdr --remote serveserve.local --session upstream')
+[ -n "$toad" ] || toad=$(launch 'toad' 'toad')
+aerospace list-windows --all --format '%{window-id}|%{app-pid}|%{app-bundle-id}' |
+    awk -F '|' -v id="$toad" '$1 == id' > "$toad_state"
+
+# Rebuild only these four windows; staging also makes repeated runs idempotent.
+for id in "$default" "$dynamical" "$upstream" "$toad"; do
+    aerospace fullscreen --window-id "$id" off
+    aerospace move-node-to-workspace --window-id "$id" "$staging"
+    aerospace layout --window-id "$id" tiling
+done
+aerospace flatten-workspace-tree --workspace "$workspace"
+aerospace move-node-to-workspace --window-id "$default" "$workspace"
+aerospace focus --window-id "$default"
+aerospace layout h_tiles
+aerospace move-node-to-workspace --window-id "$dynamical" "$workspace"
+aerospace move-node-to-workspace --window-id "$upstream" "$workspace"
+aerospace move-node-to-workspace --window-id "$toad" "$workspace"
+aerospace flatten-workspace-tree --workspace "$workspace"
+# Root insertion order depends on focus history. Explicitly order the leaves
+# before forming the left container; stop at the workspace boundary.
+for id in "$toad" "$upstream" "$dynamical" "$default"; do
+    for step in 1 2 3; do
+        aerospace move --window-id "$id" --boundaries-action stop left
+    done
+done
+aerospace join-with --window-id "$default" right
+aerospace focus --window-id "$dynamical"
+aerospace move --window-id "$upstream" left
+aerospace layout --window-id "$default" v_accordion
+aerospace balance-sizes --workspace "$workspace"
+
+# NSScreen uses logical points, as does AeroSpace resize. Account for our
+# two 4-point outer gaps and the 4-point gap between columns.
+screen=$(aerospace list-monitors --focused --format '%{monitor-appkit-nsscreen-screens-id}')
+width=$(osascript -l JavaScript - "$screen" <<'JXA'
+ObjC.import('AppKit');
+function run(argv) {
+    return Math.floor(($.NSScreen.screens.objectAtIndex(Number(argv[0]) - 1).visibleFrame.size.width - 12) / 3);
+}
+JXA
+)
+aerospace resize --window-id "$toad" width "$width"
+aerospace focus --window-id "$default"

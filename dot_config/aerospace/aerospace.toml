@@ -76,6 +76,8 @@ outer.right = 4
 # i3's $mod+Return. -n forces a new kitty window rather than raising the
 # existing one.
 alt-enter = 'exec-and-forget open -na kitty'
+# Three herdr sessions on the left, toad on the right (workspace 6).
+alt-shift-enter = 'exec-and-forget "$HOME/.local/bin/herdr-desk"'
 
 # --- focus (i3 $mod+hjkl) ---------------------------------------------------
 alt-h = 'focus left'
