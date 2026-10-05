@@ -1,0 +1,28 @@
+#!/bin/sh
+# Choose the supervisor runtime inside a Herdr popup.
+set -eu
+
+if choice=$(printf '%s\n' Codex Claude | FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= fzf \
+    --no-multi --no-sort --layout=reverse --no-info \
+    --prompt='Supervisor > ' --header='Enter: open · Esc: cancel'); then
+    case "$choice" in
+        Codex) runtime=codex ;;
+        Claude) runtime=claude ;;
+        *) exit 1 ;;
+    esac
+else
+    status=$?
+    case "$status" in
+        1|130) exit 0 ;;
+        *) exit "$status" ;;
+    esac
+fi
+
+if "${HERDR_BIN_PATH:-herdr}" plugin action invoke "mrshll.herdr-meta.open-$runtime"; then
+    exit 0
+else
+    status=$?
+    printf '\nPress Enter to close.'
+    read -r reply || :
+    exit "$status"
+fi

@@ -50,9 +50,11 @@ reload_config = ""
 # Use the canonical shift spelling so the Mac client recognizes the binding.
 [[keys.command]]
 key = "prefix+shift+s"
-type = "plugin_action"
-command = "mrshll.herdr-meta.open"
-description = "Open supervisor"
+type = "popup"
+command = '"$HOME/.local/bin/herdr-supervisor"'
+description = "Choose Codex or Claude supervisor"
+width = 48
+height = 10
 
 [[keys.command]]
 key = "prefix+R"
