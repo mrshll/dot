@@ -1,0 +1,12 @@
+# Stable tab labels, independent of titles emitted by herdr or fish.
+os_window_title herdr: sessions
+new_tab default
+cd ~
+launch /opt/homebrew/bin/fish -lc 'herdr --remote serveserve.local; exec fish'
+new_tab dynamical
+cd ~
+launch /opt/homebrew/bin/fish -lc 'herdr --remote serveserve.local --session dynamical; exec fish'
+new_tab upstream
+cd ~
+launch /opt/homebrew/bin/fish -lc 'herdr --remote serveserve.local --session upstream; exec fish'
+focus_tab 0

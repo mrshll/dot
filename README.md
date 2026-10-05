@@ -37,13 +37,14 @@ Run it from the Mac: the Mac is not SSH-reachable from the server (Remote Login 
 ## Herdr desktop (Mac)
 
 Press **Alt+Shift+Enter** or run `herdr-desk` to arrange workspace 6 with
-three Kitty windows attached to serveserve's default, dynamical, and upstream
-herdr sessions in a vertical accordion on the left (2/3 width), and toad on
-the right (1/3). Existing launcher windows and an open toad window are reused.
+one Kitty window with labeled tabs attached to serveserve's default, dynamical,
+and upstream herdr sessions on the left (2/3 width), and toad on the right
+(1/3). The tab labels stay visible at the top. Existing launcher windows and
+an open toad window are reused.
 Use `herdr-desk NUMBER` to choose another workspace; unrelated windows on the
 destination are left alone and the launcher exits with an explanation.
 
-**Alt+J/K** switches herdr windows; **Alt+L** focuses toad and **Alt+H** returns
+**Ctrl+Tab / Ctrl+Shift+Tab** switches herdr tabs; **Alt+L** focuses toad and **Alt+H** returns
 to herdr. **Alt+6** returns to this workspace. Run the launcher again after
 changing monitors to restore the proportions. Closing Kitty detaches the
 herdr clients; remote agents keep running.
