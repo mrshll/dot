@@ -1,0 +1,11 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /*
+  ~/.ssh/config is hand-maintained and not in this repo; this only guarantees
+  its first line includes the passh forward and passes the rest through.
+  First line, because an Include after a Host line applies only to that Host.
+*/ -}}
+{{- $include := "Include ~/.ssh/config.d/passh" -}}
+{{- if ne (first (splitList "\n" .chezmoi.stdin) | trim) $include -}}
+{{ $include }}
+{{ end -}}
+{{ .chezmoi.stdin -}}
