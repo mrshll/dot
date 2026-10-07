@@ -1,5 +1,6 @@
 README.md
 setup/
+tests/
 
 # kitty and espanso are macOS-only (GUI-only; the server is headless)
 {{ if ne .chezmoi.os "darwin" }}
@@ -13,6 +14,13 @@ setup/
 {{ if ne .chezmoi.os "darwin" }}
 .local/bin/passhd
 Library
+{{ end }}
+
+# The passh RemoteForward belongs on the machine I SSH *from*: the Mac. A server
+# carrying it onward would hand its tunnel to every host it reaches.
+{{ if ne .chezmoi.os "darwin" }}
+.ssh/config
+.ssh/config.d
 {{ end }}
 
 # the pytest guard only makes sense on the shared server (see machine.fish.tmpl)
