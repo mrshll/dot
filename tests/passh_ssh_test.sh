@@ -16,6 +16,9 @@ FORWARD="remoteforward 18340 [127.0.0.1]:18340"
 FORWARDED=(serveserve serveserve.local 100.72.11.128 marshbox marshbox.local 192.168.1.102)
 # The stale marshbox Tailscale address, near-miss names, and unrelated hosts.
 NOT_FORWARDED=(100.106.61.56 github.com serveserve.example marshbox.example 192.168.1.10 localhost)
+# The targets the PR tells the Mac to apply: the directory, not the file in
+# it, so a first install creates config.d.
+MAC_TARGETS=(.ssh/config .ssh/config.d)
 
 # Stands in for the Mac's hand-maintained config: a global directive that must
 # keep applying everywhere, and an existing alias block that already carries
@@ -34,9 +37,12 @@ failures=0
 fail() { printf 'FAIL: %s\n' "$*" >&2; failures=$((failures + 1)); }
 pass() { printf 'ok:   %s\n' "$*"; }
 
-# apply OS HOME: render only ~/.ssh into HOME as if chezmoi ran on OS.
+# apply OS HOME TARGET...: as if chezmoi ran on OS, apply TARGETs (relative to
+# HOME) into HOME.
 apply() {
-    local os=$1 home=$2
+    local os=$1 home=$2 target targets=()
+    shift 2
+    for target in "$@"; do targets+=("$home/$target"); done
     cat > "$WORK/chezmoi-$os.toml" <<EOF
 [data]
   hostname = "test-$os"
@@ -44,7 +50,7 @@ apply() {
   is_server = false
   has_op = false
 EOF
-    chezmoi apply "$home/.ssh" \
+    chezmoi apply "${targets[@]}" \
         --source "$REPO_DIR" \
         --destination "$home" \
         --config "$WORK/chezmoi-$os.toml" \
@@ -68,7 +74,7 @@ printf "%s" "$EXISTING_CONFIG" > "$WORK/existing"
 cp "$WORK/existing" "$mac/.ssh/config"
 chmod 600 "$mac/.ssh/config"
 
-apply darwin "$mac"
+apply darwin "$mac" "${MAC_TARGETS[@]}"
 
 first_line=$(head -n1 "$mac/.ssh/config")
 if [ "$first_line" = "Include ~/.ssh/config.d/passh" ]; then
@@ -84,7 +90,7 @@ else
 fi
 
 before=$(cksum < "$mac/.ssh/config")
-apply darwin "$mac"
+apply darwin "$mac" "${MAC_TARGETS[@]}"
 if [ "$(cksum < "$mac/.ssh/config")" = "$before" ]; then
     pass "mac: re-apply is idempotent"
 else
@@ -129,10 +135,10 @@ bad=$(grep -i '^[[:space:]]*remoteforward' "$mac/.ssh/config.d/passh" \
 [ -z "$bad" ] && pass "mac: fragment forwards only 18340 -> 127.0.0.1:18340" \
     || fail "mac: unexpected forward lines: $bad"
 
-# A Mac with no ~/.ssh/config yet gets just the include.
+# A Mac with ~/.ssh but no ~/.ssh/config yet gets just the include.
 fresh="$WORK/fresh"
-mkdir -p "$fresh"
-apply darwin "$fresh"
+mkdir -p "$fresh/.ssh"
+apply darwin "$fresh" "${MAC_TARGETS[@]}"
 if printf "Include ~/.ssh/config.d/passh\n" | cmp -s - "$fresh/.ssh/config"; then
     pass "mac: missing ~/.ssh/config is created with only the include"
 else
@@ -143,7 +149,7 @@ fi
 bare="$WORK/bare"
 mkdir -p "$bare/.ssh"
 printf 'Include ~/.ssh/config.d/passh' > "$bare/.ssh/config"
-apply darwin "$bare"
+apply darwin "$bare" "${MAC_TARGETS[@]}"
 if printf "Include ~/.ssh/config.d/passh" | cmp -s - "$bare/.ssh/config"; then
     pass "mac: existing include without a newline is not duplicated"
 else
@@ -156,7 +162,7 @@ server="$WORK/server"
 mkdir -p "$server/.ssh"
 cp "$WORK/existing" "$server/.ssh/config"
 
-apply linux "$server"
+apply linux "$server" .ssh
 
 if cmp -s "$WORK/existing" "$server/.ssh/config"; then
     pass "server: ~/.ssh/config untouched"
