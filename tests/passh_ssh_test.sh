@@ -64,7 +64,8 @@ forwards_for() {
 mac="$WORK/mac"
 mkdir -p "$mac/.ssh"
 chmod 700 "$mac/.ssh"
-printf '%s' "$EXISTING_CONFIG" > "$mac/.ssh/config"
+printf "%s" "$EXISTING_CONFIG" > "$WORK/existing"
+cp "$WORK/existing" "$mac/.ssh/config"
 chmod 600 "$mac/.ssh/config"
 
 apply darwin "$mac"
@@ -76,7 +77,7 @@ else
     fail "mac: first line is '$first_line'"
 fi
 
-if [ "$(tail -n +2 "$mac/.ssh/config")" = "$(printf '%s' "$EXISTING_CONFIG")" ]; then
+if { echo "Include ~/.ssh/config.d/passh"; cat "$WORK/existing"; } | cmp -s - "$mac/.ssh/config"; then
     pass "mac: existing config preserved byte for byte after the include"
 else
     fail "mac: existing config changed"
@@ -132,7 +133,7 @@ bad=$(grep -i '^[[:space:]]*remoteforward' "$mac/.ssh/config.d/passh" \
 fresh="$WORK/fresh"
 mkdir -p "$fresh"
 apply darwin "$fresh"
-if [ "$(cat "$fresh/.ssh/config")" = "Include ~/.ssh/config.d/passh" ]; then
+if printf "Include ~/.ssh/config.d/passh\n" | cmp -s - "$fresh/.ssh/config"; then
     pass "mac: missing ~/.ssh/config is created with only the include"
 else
     fail "mac: fresh ~/.ssh/config is '$(cat "$fresh/.ssh/config")'"
@@ -143,7 +144,7 @@ bare="$WORK/bare"
 mkdir -p "$bare/.ssh"
 printf 'Include ~/.ssh/config.d/passh' > "$bare/.ssh/config"
 apply darwin "$bare"
-if [ "$(cat "$bare/.ssh/config")" = "Include ~/.ssh/config.d/passh" ]; then
+if printf "Include ~/.ssh/config.d/passh" | cmp -s - "$bare/.ssh/config"; then
     pass "mac: existing include without a newline is not duplicated"
 else
     fail "mac: config became '$(cat "$bare/.ssh/config")'"
@@ -153,11 +154,11 @@ fi
 
 server="$WORK/server"
 mkdir -p "$server/.ssh"
-printf '%s' "$EXISTING_CONFIG" > "$server/.ssh/config"
+cp "$WORK/existing" "$server/.ssh/config"
 
 apply linux "$server"
 
-if [ "$(cat "$server/.ssh/config")" = "$(printf '%s' "$EXISTING_CONFIG")" ]; then
+if cmp -s "$WORK/existing" "$server/.ssh/config"; then
     pass "server: ~/.ssh/config untouched"
 else
     fail "server: ~/.ssh/config changed"
