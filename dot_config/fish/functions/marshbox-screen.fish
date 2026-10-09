@@ -44,5 +44,15 @@ function marshbox-screen --description "Show marshbox's desktop in Screen Sharin
         end
     end
 
+    # The tunnel comes up whether or not anything listens on marshbox's 5900,
+    # and the VNC service there is transient (gone after a logout or reboot).
+    # Read the server's protocol greeting through the tunnel before opening.
+    set -l greeting (nc -w 3 127.0.0.1 $port </dev/null 2>/dev/null | head -c 12)
+    if not string match -q 'RFB *' -- "$greeting"
+        echo "marshbox-screen: tunnel is up, but no VNC server answers on marshbox's 127.0.0.1:5900;" \
+            "start its desktop-sharing service, then run this again" >&2
+        return 1
+    end
+
     open -a "Screen Sharing" vnc://127.0.0.1:$port
 end

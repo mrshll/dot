@@ -33,10 +33,15 @@ case " $* " in
     *) exit 1 ;;
 esac
 EOF
+# nc: -z is the port check; otherwise it reads the VNC greeting through the
+# tunnel, which only arrives if a server listens on the far side.
 cat > "$stubs/nc" <<'EOF'
 #!/bin/sh
 echo "nc $*" >> "$STATE/log"
-[ -e "$STATE/listening" ] || [ -e "$STATE/busy" ]
+case " $* " in
+    *" -z "*) [ -e "$STATE/listening" ] || [ -e "$STATE/busy" ] ;;
+    *) [ -e "$STATE/listening" ] && [ -e "$STATE/server" ] && printf "RFB 003.008\n"; exit 0 ;;
+esac
 EOF
 cat > "$stubs/open" <<'EOF'
 #!/bin/sh
@@ -54,7 +59,7 @@ run() {
         "$FISH" --no-config -c "source $FUNC; marshbox-screen $*" \
         > "$WORK/out" 2>&1 && echo 0 || echo $?
 }
-reset() { rm -rf "$WORK/state" "$WORK/home"; mkdir -p "$WORK/state" "$WORK/home/.ssh"; : > "$WORK/state/log"; }
+reset() { rm -rf "$WORK/state" "$WORK/home"; mkdir -p "$WORK/state" "$WORK/home/.ssh"; : > "$WORK/state/log"; touch "$WORK/state/server"; }
 starts() { grep -c ' -M ' "$WORK/state/log" || true; }
 opens() { grep -c '^open ' "$WORK/state/log" || true; }
 
@@ -116,6 +121,14 @@ touch "$WORK/state/fail_start"
 rc=$(run)
 [ "$rc" != 0 ] && [ "$(opens)" = 0 ] && pass "failed tunnel: non-zero exit, Screen Sharing not opened" \
     || fail "failed tunnel: exit $rc, opens $(opens)"
+
+# --- tunnel up but no VNC server on marshbox: say so, do not open ----------
+reset
+rm "$WORK/state/server"
+rc=$(run)
+[ "$rc" != 0 ] && [ "$(opens)" = 0 ] && grep -q "no VNC server answers" "$WORK/out" \
+    && pass "no VNC server on marshbox: clear message, Screen Sharing not opened" \
+    || fail "no server: exit $rc, opens $(opens): $(cat "$WORK/out")"
 
 # --- usage -------------------------------------------------------------------
 reset
