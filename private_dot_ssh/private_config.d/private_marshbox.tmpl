@@ -1,0 +1,25 @@
+{{ if eq .chezmoi.os "darwin" -}}
+# Mac -> marshbox: offer the dedicated key first and skip the agent, which
+# otherwise offers every key it holds until sshd stops at "Too many
+# authentication failures". Same as the manual -i ... -o IdentitiesOnly=yes
+# -o IdentityAgent=none: IdentityFile lines elsewhere in ~/.ssh/config still
+# add to the list, after this one. Identity only: host trust stays in the
+# Mac's own known_hosts, and the passh forward comes from config.d/passh.
+Host marshbox marshbox.local 192.168.1.102
+  IdentityFile ~/.ssh/id_ed25519_marshbox
+  IdentitiesOnly yes
+  IdentityAgent none
+{{ else -}}
+# serveserve -> marshbox, so setup/sync.sh can run from here. A dedicated key
+# (no agent, no other identities) and a host key pinned to the one Marsh
+# verified after the 2026-10-08 reinstall; no fallback to known_hosts or TOFU.
+# serveserve only (.chezmoiignore). No RemoteForward: the passh tunnel comes
+# from the Mac and is never carried onward from here.
+Host marshbox.local
+  IdentityFile ~/.ssh/id_ed25519_marshbox
+  IdentitiesOnly yes
+  IdentityAgent none
+  UserKnownHostsFile ~/.ssh/known_hosts.d/marshbox
+  GlobalKnownHostsFile /dev/null
+  StrictHostKeyChecking yes
+{{ end -}}

@@ -22,9 +22,12 @@ Library
 .ssh/config.d/passh
 {{ end }}
 
-# serveserve's route to marshbox, so sync.sh can run there (config.d/marshbox).
-{{ if not .is_server }}
+# marshbox: identity selection on the Mac; on serveserve the pinned route that
+# lets sync.sh run there (config.d/marshbox).
+{{ if and (ne .chezmoi.os "darwin") (not .is_server) }}
 .ssh/config.d/marshbox
+{{ end }}
+{{ if not .is_server }}
 .ssh/known_hosts.d
 {{ end }}
 
