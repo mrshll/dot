@@ -21,6 +21,9 @@ NOT_FORWARDED=(100.106.61.56 github.com serveserve.example marshbox.example 192.
 # The targets the PR tells the Mac to apply: the directory, not the file in
 # it, so a first install creates config.d.
 MAC_TARGETS=(.ssh/config .ssh/config.d)
+# What the Mac's ~/.ssh/config must start with: the passh forward, then the
+# marshbox identity.
+MAC_INCLUDES="Include ~/.ssh/config.d/passh\nInclude ~/.ssh/config.d/marshbox\n"
 
 # Stands in for the Mac's hand-maintained config: a global directive that must
 # keep applying everywhere, and an existing alias block that already carries
@@ -93,15 +96,8 @@ chmod 600 "$mac/.ssh/config"
 apply darwin "$mac" "${MAC_TARGETS[@]}"
 private_ssh mac "$mac"
 
-first_line=$(head -n1 "$mac/.ssh/config")
-if [ "$first_line" = "Include ~/.ssh/config.d/passh" ]; then
-    pass "mac: include is the first line of ~/.ssh/config"
-else
-    fail "mac: first line is '$first_line'"
-fi
-
-if { echo "Include ~/.ssh/config.d/passh"; cat "$WORK/existing"; } | cmp -s - "$mac/.ssh/config"; then
-    pass "mac: existing config preserved byte for byte after the include"
+if { printf "$MAC_INCLUDES"; cat "$WORK/existing"; } | cmp -s - "$mac/.ssh/config"; then
+    pass "mac: both includes lead ~/.ssh/config, existing config preserved byte for byte"
 else
     fail "mac: existing config changed"
 fi
@@ -152,26 +148,122 @@ bad=$(grep -i '^[[:space:]]*remoteforward' "$mac/.ssh/config.d/passh" \
 [ -z "$bad" ] && pass "mac: fragment forwards only 18340 -> 127.0.0.1:18340" \
     || fail "mac: unexpected forward lines: $bad"
 
-# A Mac with ~/.ssh but no ~/.ssh/config yet gets just the include.
+# A Mac with ~/.ssh but no ~/.ssh/config yet gets just the includes.
 fresh="$WORK/fresh"
 mkdir -p "$fresh/.ssh"
 apply darwin "$fresh" "${MAC_TARGETS[@]}"
-if printf "Include ~/.ssh/config.d/passh\n" | cmp -s - "$fresh/.ssh/config"; then
-    pass "mac: missing ~/.ssh/config is created with only the include"
+if printf "$MAC_INCLUDES" | cmp -s - "$fresh/.ssh/config"; then
+    pass "mac: missing ~/.ssh/config is created with only the includes"
 else
     fail "mac: fresh ~/.ssh/config is '$(cat "$fresh/.ssh/config")'"
 fi
 
-# An include already on the first line, with no trailing newline, is left alone.
+# Upgrading a Mac that already has #3's single include, with or without a
+# trailing newline, does not duplicate it.
+old="$WORK/old"
+mkdir -p "$old/.ssh"
+{ echo "Include ~/.ssh/config.d/passh"; cat "$WORK/existing"; } > "$old/.ssh/config"
+apply darwin "$old" "${MAC_TARGETS[@]}"
+if { printf "$MAC_INCLUDES"; cat "$WORK/existing"; } | cmp -s - "$old/.ssh/config"; then
+    pass "mac: upgrade from the single passh include adds marshbox once"
+else
+    fail "mac: upgraded config is .$(head -n3 "$old/.ssh/config" | tr "\n" "|")."
+fi
 bare="$WORK/bare"
 mkdir -p "$bare/.ssh"
-printf 'Include ~/.ssh/config.d/passh' > "$bare/.ssh/config"
+printf "Include ~/.ssh/config.d/passh" > "$bare/.ssh/config"
 apply darwin "$bare" "${MAC_TARGETS[@]}"
-if printf "Include ~/.ssh/config.d/passh" | cmp -s - "$bare/.ssh/config"; then
-    pass "mac: existing include without a newline is not duplicated"
+if printf "$MAC_INCLUDES" | cmp -s - "$bare/.ssh/config"; then
+    pass "mac: a lone include without a newline is not duplicated"
 else
     fail "mac: config became '$(cat "$bare/.ssh/config")'"
 fi
+
+# marshbox identity on the Mac: only the dedicated key, no agent, for every
+# marshbox name; trust stays the Mac's own, and the forward is unchanged.
+[ ! -e "$mac/.ssh/known_hosts.d" ] && pass "mac: no host-key pin installed" \
+    || fail "mac: ~/.ssh/known_hosts.d installed"
+for host in marshbox marshbox.local 192.168.1.102 marsh@marshbox.local; do
+    cfg=$(ssh -G -F "$resolved" "$host" </dev/null 2>/dev/null)
+    ids=$(grep '^identityfile ' <<< "$cfg" | tr '\n' ';')
+    if [ "$ids" = "identityfile ~/.ssh/id_ed25519_marshbox;" ] \
+        && grep -qx 'identitiesonly yes' <<< "$cfg" \
+        && grep -qx 'identityagent none' <<< "$cfg" \
+        && ! grep -q '^userknownhostsfile .*known_hosts\.d' <<< "$cfg" \
+        && ! grep -qx 'globalknownhostsfile /dev/null' <<< "$cfg" \
+        && [ "$(grep '^remoteforward ' <<< "$cfg")" = "$FORWARD" ]; then
+        pass "mac: $host uses only the marshbox key, no agent, own trust, one forward"
+    else
+        fail "mac: $host: $ids $(grep -E '^(identitiesonly|identityagent|userknownhostsfile|globalknownhostsfile|remoteforward) ' <<< "$cfg" | tr '\n' ';')"
+    fi
+done
+for host in serveserve.local github.com marshbox.example; do
+    cfg=$(ssh -G -F "$resolved" "$host" </dev/null 2>/dev/null)
+    if grep -qE '^(identityagent none|identitiesonly yes|identityfile .*id_ed25519_marshbox)' <<< "$cfg"; then
+        fail "mac: marshbox identity leaks to $host"
+    else
+        pass "mac: $host keeps its identity settings"
+    fi
+done
+
+# A hand-written marshbox block keeps its trust and connection settings; the
+# managed identity options come first and win, and its extra key is offered
+# after ours (IdentityFile adds up; it does not replace).
+hand="$WORK/hand"
+mkdir -p "$hand/.ssh"
+cat > "$hand/.ssh/config" <<'EOF'
+Host marshbox.local
+  HostName 192.168.1.102
+  User marsh
+  Port 2222
+  IdentityFile ~/.ssh/other_key
+  IdentitiesOnly no
+  IdentityAgent /tmp/some-agent.sock
+  UserKnownHostsFile ~/.ssh/known_hosts.marshbox-postinstall
+  StrictHostKeyChecking yes
+  HostKeyAlias marshbox-reinstalled
+EOF
+apply darwin "$hand" "${MAC_TARGETS[@]}"
+sed "s|~/.ssh/config.d/|$hand/.ssh/config.d/|" "$hand/.ssh/config" > "$WORK/hand_resolved"
+cfg=$(ssh -G -F "$WORK/hand_resolved" marshbox.local </dev/null 2>/dev/null)
+for want in \
+    "identitiesonly yes" "identityagent none" "hostname 192.168.1.102" "user marsh" \
+    "port 2222" "userknownhostsfile $HOME/.ssh/known_hosts.marshbox-postinstall" \
+    "stricthostkeychecking true" "hostkeyalias marshbox-reinstalled" "$FORWARD"; do
+    grep -Fqx -- "$want" <<< "$cfg" && pass "mac+hand-written: has '$want'" \
+        || fail "mac+hand-written: lacks '$want'"
+done
+[ "$(grep -m1 '^identityfile ' <<< "$cfg")" = "identityfile ~/.ssh/id_ed25519_marshbox" ] \
+    && pass "mac+hand-written: marshbox key offered first" \
+    || fail "mac+hand-written: first identity is '$(grep -m1 '^identityfile ' <<< "$cfg")'"
+
+# The modifier owns only the leading run of managed includes. Each case must
+# come out as expected and stay put on a second apply.
+check_modify() {
+    local label=$1 input=$2 expected=$3 home="$WORK/modify-$RANDOM"
+    mkdir -p "$home/.ssh"
+    printf "$input" > "$home/.ssh/config"
+    apply darwin "$home" "${MAC_TARGETS[@]}"
+    if printf "$expected" | cmp -s - "$home/.ssh/config"; then
+        apply darwin "$home" "${MAC_TARGETS[@]}"
+        printf "$expected" | cmp -s - "$home/.ssh/config" \
+            && pass "mac modify: $label" || fail "mac modify: $label changes on re-apply"
+    else
+        fail "mac modify: $label gave '$(tr '\n' '|' < "$home/.ssh/config")'"
+    fi
+}
+check_modify "both includes already present" \
+    "${MAC_INCLUDES}Host a\n" "${MAC_INCLUDES}Host a\n"
+check_modify "reordered and duplicated prefix is normalised" \
+    "Include ~/.ssh/config.d/marshbox\nInclude ~/.ssh/config.d/passh\n  Include ~/.ssh/config.d/passh  \nHost a\n" \
+    "${MAC_INCLUDES}Host a\n"
+check_modify "an unrelated include first is kept after the prefix" \
+    "Include ~/.ssh/other\nHost a\n" "${MAC_INCLUDES}Include ~/.ssh/other\nHost a\n"
+check_modify "a blank line ends the managed run" \
+    "Include ~/.ssh/config.d/passh\n\nInclude ~/.ssh/config.d/marshbox\n" \
+    "${MAC_INCLUDES}\nInclude ~/.ssh/config.d/marshbox\n"
+check_modify "a managed-looking include under a Host is the user's" \
+    "Host a\n  Include ~/.ssh/config.d/passh\n" "${MAC_INCLUDES}Host a\n  Include ~/.ssh/config.d/passh\n"
 
 # --- serveserve -------------------------------------------------------------
 # Reaches marshbox with its dedicated key and a pinned host key, so sync.sh can
