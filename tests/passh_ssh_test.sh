@@ -233,9 +233,10 @@ for want in \
     grep -Fqx -- "$want" <<< "$cfg" && pass "mac+hand-written: has '$want'" \
         || fail "mac+hand-written: lacks '$want'"
 done
-[ "$(grep -m1 '^identityfile ' <<< "$cfg")" = "identityfile ~/.ssh/id_ed25519_marshbox" ] \
-    && pass "mac+hand-written: marshbox key offered first" \
-    || fail "mac+hand-written: first identity is '$(grep -m1 '^identityfile ' <<< "$cfg")'"
+ids=$(grep '^identityfile ' <<< "$cfg" | tr '\n' ';')
+[ "$ids" = "identityfile ~/.ssh/id_ed25519_marshbox;identityfile ~/.ssh/other_key;" ] \
+    && pass "mac+hand-written: marshbox key first, the hand-written key kept after it" \
+    || fail "mac+hand-written: identities are '$ids'"
 
 # The modifier owns only the leading run of managed includes. Each case must
 # come out as expected and stay put on a second apply.
