@@ -1,0 +1,11 @@
+# serveserve -> marshbox, so setup/sync.sh can run from here. A dedicated key
+# (no agent, no other identities) and a host key pinned to the one Marsh
+# verified after the 2026-10-08 reinstall; no fallback to known_hosts or TOFU.
+# serveserve only (.chezmoiignore). No RemoteForward: the passh tunnel comes
+# from the Mac and is never carried onward from here.
+Host marshbox.local
+  IdentityFile ~/.ssh/id_ed25519_marshbox
+  IdentitiesOnly yes
+  IdentityAgent none
+  UserKnownHostsFile ~/.ssh/known_hosts.d/marshbox
+  StrictHostKeyChecking yes

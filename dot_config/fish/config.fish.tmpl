@@ -1,5 +1,9 @@
 if status is-interactive
-    alias vim nvim
+    # nvim comes from a release tarball (setup/install.sh, needs sudo), so a
+    # fresh box can lack it; keep vim working until then.
+    if command -q nvim
+        alias vim nvim
+    end
     alias ls eza
     if set -q KITTY_WINDOW_ID; and not set -q TMUX
         alias ssh "kitten ssh"

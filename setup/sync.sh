@@ -17,6 +17,7 @@ REPO_REMOTE="https://github.com/mrshll/dot.git"
 # skipped, so the script can run from any listed host.
 REMOTES=(
     "serveserve.local"
+    "marshbox.local"
 )
 
 is_local_host() {

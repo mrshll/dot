@@ -15,9 +15,11 @@ trap 'rm -rf "$WORK"' EXIT
 
 stubs="$WORK/bin"
 mkdir -p "$stubs" "$WORK/home"
-for tool in bash sh uname hostname printf mkdir chmod; do
+for tool in bash sh hostname printf mkdir chmod; do
     ln -s "$(command -v "$tool")" "$stubs/$tool"
 done
+# install.sh's Linux path is under test, whichever OS runs the test.
+printf '#!/bin/sh\necho Linux\n' > "$stubs/uname"
 cat > "$stubs/sudo" <<'EOF'
 #!/bin/sh
 echo "sudo $*" >> "$LOG"
@@ -30,7 +32,7 @@ echo "curl $*" >> "$LOG"
 # The installer script: record its arguments and drop a binary where -b says.
 echo 'echo "installer $*" >> "$LOG"; mkdir -p "$2"; : > "$2/chezmoi"; chmod +x "$2/chezmoi"'
 EOF
-chmod +x "$stubs/sudo" "$stubs/curl"
+chmod +x "$stubs/sudo" "$stubs/curl" "$stubs/uname"
 
 log="$WORK/log"
 : > "$log"
