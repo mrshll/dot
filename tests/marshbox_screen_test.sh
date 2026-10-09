@@ -29,7 +29,7 @@ case " $* " in
     *" -O exit "*) [ -e "$STATE/exit_fail" ] && exit 255; rm -f "$STATE/master" "$STATE/listening" "$ctl" ;;
     *" -M "*)
         [ -e "$STATE/fail_start" ] && exit 255
-        [ -e "$STATE/slow_start" ] && sleep 1.5
+        if [ -e "$STATE/slow_start" ]; then echo $PPID > "$STATE/starter"; touch "$STATE/starting"; sleep 1.5; rm -f "$STATE/starting"; fi
         [ -d /proc/$$/fd ] && [ -e /proc/$$/fd/9 ] && echo "master inherited fd 9" >> "$STATE/../fd9"
         touch "$STATE/master" "$STATE/listening" "$ctl" ;;
     *"ss -Hltn"*) [ -e "$STATE/server" ] && echo "LISTEN 0 5 127.0.0.1:5900 0.0.0.0:*"; exit 0 ;;
@@ -190,6 +190,25 @@ rc=$(run)
     || fail "after worker killed: exit $rc, starts $(starts): $(cat "$WORK/out")"
 rc=$(run stop)
 [ "$rc" = 0 ] && [ ! -e "$WORK/state/master" ] && pass "and stop ends it" || fail "stop after crash: exit $rc"
+
+# The worker is killed while its ssh is still starting: that ssh survives and
+# will publish the control socket. A run in the meantime must not remove it,
+# and once the start finishes, stop reaches the tunnel.
+reset
+touch "$WORK/state/slow_start"
+run > /dev/null & a=$!
+until [ -s "$WORK/state/starter" ]; do sleep 0.1; done
+kill -9 "$(cat "$WORK/state/starter")"
+wait "$a" 2>/dev/null || true
+rc=$(run)
+[ "$rc" != 0 ] && grep -q "earlier start is still running" "$WORK/out" && [ "$(starts)" = 1 ] \
+    && pass "while a killed run's ssh is still starting: refuse, start nothing" \
+    || fail "ssh still starting: exit $rc, starts $(starts): $(cat "$WORK/out")"
+while [ -e "$WORK/state/starting" ]; do sleep 0.1; done
+[ -e "$WORK/home/.ssh/marshbox-screen.sock" ] && pass "the surviving start keeps its control socket" \
+    || fail "control socket removed"
+rc=$(run stop)
+[ "$rc" = 0 ] && [ ! -e "$WORK/state/master" ] && pass "and stop ends that tunnel" || fail "stop after ssh crash: exit $rc"
 
 # --- stop that fails is reported --------------------------------------------
 reset

@@ -67,8 +67,16 @@ function __marshbox_screen
             echo "marshbox-screen: 127.0.0.1:$port is already in use by something else; leaving it alone" >&2
             return 1
         end
-        # Under the lock, a socket nothing answers on is left by a dead tunnel.
-        rm -f ~/.ssh/marshbox-screen.sock
+        # An ssh still running with our control path is a start that outlived
+        # its run (killed mid-start) and may yet publish the socket: leave it.
+        set -l sock ~/.ssh/marshbox-screen.sock
+        if pgrep -f -- "-S $sock" >/dev/null 2>&1
+            echo "marshbox-screen: an earlier start is still running or lost its socket;" \
+                "try again shortly (pgrep -fl -- '-S $sock' shows it)" >&2
+            return 1
+        end
+        # Otherwise, under the lock, a socket nothing answers on is stale.
+        rm -f $sock
         # With ExitOnForwardFailure, -f backgrounds only once the forward is up.
         if not ssh $ssh_opts -M -f -N -T \
                 -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
