@@ -197,6 +197,23 @@ for host in marshbox marshbox.local 192.168.1.102 marsh@marshbox.local; do
         fail "mac: $host: $ids $(grep -E '^(identitiesonly|identityagent|userknownhostsfile|globalknownhostsfile|remoteforward) ' <<< "$cfg" | tr '\n' ';')"
     fi
 done
+# Tooling that sets ExitOnForwardFailure=yes (mono's make ssh-remote-connect)
+# uses marshbox-noforward: same host and identity, no passh forward, so a
+# session already holding 18340 cannot make it exit.
+cfg=$(ssh -G -F "$resolved" marshbox-noforward </dev/null 2>/dev/null)
+ids=$(grep '^identityfile ' <<< "$cfg" | tr '\n' ';')
+if grep -qx 'hostname marshbox.local' <<< "$cfg" \
+    && [ "$ids" = "identityfile ~/.ssh/id_ed25519_marshbox;" ] \
+    && grep -qx 'identitiesonly yes' <<< "$cfg" \
+    && grep -qx 'identityagent none' <<< "$cfg" \
+    && ! grep -q '^hostkeyalias ' <<< "$cfg" \
+    && ! grep -q '^userknownhostsfile .*known_hosts\.d' <<< "$cfg" \
+    && ! grep -q '^remoteforward ' <<< "$cfg"; then
+    pass "mac: marshbox-noforward reaches marshbox.local with the marshbox key and no forward"
+else
+    fail "mac: marshbox-noforward: $(grep -E '^(hostname|identityfile|identitiesonly|identityagent|hostkeyalias|remoteforward) ' <<< "$cfg" | tr '\n' ';')"
+fi
+
 for host in serveserve.local github.com marshbox.example; do
     cfg=$(ssh -G -F "$resolved" "$host" </dev/null 2>/dev/null)
     if grep -qE '^(identityagent none|identitiesonly yes|identityfile .*id_ed25519_marshbox)' <<< "$cfg"; then
