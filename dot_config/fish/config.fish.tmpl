@@ -25,6 +25,11 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 
 {{- end }}
 
+# uv, chezmoi and passh live in ~/.local/bin. conf.d/uv.env.fish only covers
+# machines where uv's installer was allowed to edit PATH. Appended, so it
+# never shadows anything already on PATH.
+fish_add_path --path --append ~/.local/bin
+
 # Pond
 fish_add_path ~/workspace/pond
 set -gx POND_SERVER serveserve.local  # pond binaries fall back to Tailscale IP automatically

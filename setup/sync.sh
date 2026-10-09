@@ -9,7 +9,8 @@ err()   { printf '\033[1;31m==> %s\033[0m\n' "$*" >&2; }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_REMOTE="git@github.com:mrshll/dot.git"
+# https, so a fresh remote can clone without GitHub auth (the repo is public).
+REPO_REMOTE="https://github.com/mrshll/dot.git"
 
 # --- remotes ----------------------------------------------------------------
 # Add machines here. Format: user@host. A remote that is this machine is
@@ -72,7 +73,7 @@ run_remote() {
             CHEZMOI=/opt/homebrew/bin/chezmoi
         else
             echo "  chezmoi not found — run setup/install.sh on this machine first"
-            exit 0
+            exit 1
         fi
 
         SRC="$($CHEZMOI source-path 2>/dev/null || true)"
