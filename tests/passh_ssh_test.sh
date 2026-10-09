@@ -45,7 +45,10 @@ apply() {
     local os=$1 home=$2 target targets=()
     shift 2
     for target in "$@"; do targets+=("$home/$target"); done
+    # serveserve applies with umask 002; ssh rejects group-writable config.
     cat > "$WORK/chezmoi-$os.toml" <<EOF
+umask = 0o002
+
 [data]
   hostname = "test-$os"
   os = "$os"
@@ -60,6 +63,15 @@ EOF
         --persistent-state "$home.boltdb" \
         --override-data "{\"chezmoi\":{\"os\":\"$os\"}}" \
         --no-tty --force
+}
+
+# private_ssh LABEL HOME: ssh refuses an Include target that is group or
+# world writable ("Bad owner or permissions"), which breaks every connection.
+private_ssh() {
+    local loose
+    loose=$(find "$2/.ssh" -perm /022 2>/dev/null)
+    [ -z "$loose" ] && pass "$1: nothing under ~/.ssh is group or world writable" \
+        || fail "$1: group/world writable: $(tr "\n" " " <<< "$loose")"
 }
 
 # forwards_for CONFIG HOST: the RemoteForward lines ssh would use.
@@ -77,6 +89,7 @@ cp "$WORK/existing" "$mac/.ssh/config"
 chmod 600 "$mac/.ssh/config"
 
 apply darwin "$mac" "${MAC_TARGETS[@]}"
+private_ssh mac "$mac"
 
 first_line=$(head -n1 "$mac/.ssh/config")
 if [ "$first_line" = "Include ~/.ssh/config.d/passh" ]; then
@@ -167,6 +180,7 @@ mkdir -p "$serve/.ssh"
 chmod 700 "$serve/.ssh"
 
 IS_SERVER=true apply linux "$serve" .ssh
+private_ssh serveserve "$serve"
 
 if printf "Include ~/.ssh/config.d/marshbox\n" | cmp -s - "$serve/.ssh/config"; then
     pass "serveserve: ~/.ssh/config is only the marshbox include"
