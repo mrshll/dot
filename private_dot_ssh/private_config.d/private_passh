@@ -1,13 +1,16 @@
 # passh: carry the Mac's passhd (127.0.0.1:18340) to the servers over the SSH
 # session I open, so `passh` there reaches 1Password and Touch ID here.
 #
-# ssh matches `Host` against the name typed on the command line, not the
+# Matched on the name typed on the command line (`originalhost`), not the
 # resolved HostName, so every way I reach a server is listed: alias, mDNS
-# name, and IP (Tailscale for serveserve, LAN for marshbox). marshbox's old
+# name, and IP (Tailscale for serveserve, LAN for marshbox). `Host` would also
+# match the rewritten HostName when a `Match final` reparses the config, which
+# would hand the forward to aliases that point at these hosts on purpose
+# without it (marshbox-nopassh, config.d/marshbox). marshbox's old
 # Tailscale address (100.106.61.56) has been offline since 2024 and is left
 # out so whatever holds it next does not get the forward.
 #
 # Included from the top of ~/.ssh/config (see modify_private_config). An
 # identical RemoteForward elsewhere in that file is de-duplicated by ssh.
-Host serveserve serveserve.local 100.72.11.128 marshbox marshbox.local 192.168.1.102
+Match originalhost serveserve,serveserve.local,100.72.11.128,marshbox,marshbox.local,192.168.1.102
   RemoteForward 18340 127.0.0.1:18340

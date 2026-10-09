@@ -11,11 +11,11 @@ Host marshbox marshbox.local 192.168.1.102
   IdentityAgent none
 
 # For tooling that sets ExitOnForwardFailure=yes, such as mono's
-# `make ssh-remote-connect HOST=marshbox-noforward`: the same host and key
+# `make ssh-remote-connect HOST=marshbox-nopassh`: the same host and key
 # without the passh forward (config.d/passh does not list this name), so a
 # session already holding 18340 on marshbox cannot make it exit. Host keys are
 # checked under marshbox.local, the Mac's existing entry.
-Host marshbox-noforward
+Host marshbox-nopassh
   HostName marshbox.local
   IdentityFile ~/.ssh/id_ed25519_marshbox
   IdentitiesOnly yes

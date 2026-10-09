@@ -198,9 +198,9 @@ for host in marshbox marshbox.local 192.168.1.102 marsh@marshbox.local; do
     fi
 done
 # Tooling that sets ExitOnForwardFailure=yes (mono's make ssh-remote-connect)
-# uses marshbox-noforward: same host and identity, no passh forward, so a
+# uses marshbox-nopassh: same host and identity, no passh forward, so a
 # session already holding 18340 cannot make it exit.
-cfg=$(ssh -G -F "$resolved" marshbox-noforward </dev/null 2>/dev/null)
+cfg=$(ssh -G -F "$resolved" marshbox-nopassh </dev/null 2>/dev/null)
 ids=$(grep '^identityfile ' <<< "$cfg" | tr '\n' ';')
 if grep -qx 'hostname marshbox.local' <<< "$cfg" \
     && [ "$ids" = "identityfile ~/.ssh/id_ed25519_marshbox;" ] \
@@ -209,10 +209,30 @@ if grep -qx 'hostname marshbox.local' <<< "$cfg" \
     && ! grep -q '^hostkeyalias ' <<< "$cfg" \
     && ! grep -q '^userknownhostsfile .*known_hosts\.d' <<< "$cfg" \
     && ! grep -q '^remoteforward ' <<< "$cfg"; then
-    pass "mac: marshbox-noforward reaches marshbox.local with the marshbox key and no forward"
+    pass "mac: marshbox-nopassh reaches marshbox.local with the marshbox key and no forward"
 else
-    fail "mac: marshbox-noforward: $(grep -E '^(hostname|identityfile|identitiesonly|identityagent|hostkeyalias|remoteforward) ' <<< "$cfg" | tr '\n' ';')"
+    fail "mac: marshbox-nopassh: $(grep -E '^(hostname|identityfile|identitiesonly|identityagent|hostkeyalias|remoteforward) ' <<< "$cfg" | tr '\n' ';')"
 fi
+
+# The same under a reparse: with `Match final` in the hand-written config, ssh
+# reads the config again with the hostname already rewritten to
+# marshbox.local. The passh forward must still follow the typed name, and
+# mono's own socket forward must survive.
+finalcfg="$WORK/final_config"
+{ cat "$resolved"; printf '\nMatch final all\n'; } > "$finalcfg"
+cfg=$(ssh -G -F "$finalcfg" -o ExitOnForwardFailure=yes \
+    -R /tmp/remote.sock:/tmp/local.sock marshbox-nopassh </dev/null 2>/dev/null)
+if grep -qx 'remoteforward /tmp/remote.sock /tmp/local.sock' <<< "$cfg" \
+    && ! grep -q '^remoteforward 18340 ' <<< "$cfg"; then
+    pass "mac: under Match final, marshbox-nopassh keeps its socket forward and gets no passh forward"
+else
+    fail "mac: under Match final, marshbox-nopassh forwards: $(grep '^remoteforward ' <<< "$cfg" | tr '\n' ';')"
+fi
+for host in "${FORWARDED[@]}"; do
+    got=$(forwards_for "$finalcfg" "$host")
+    [ "$got" = "$FORWARD" ] && pass "mac: under Match final, $host still gets exactly one forward" \
+        || fail "mac: under Match final, $host forwards: '${got:-none}'"
+done
 
 for host in serveserve.local github.com marshbox.example; do
     cfg=$(ssh -G -F "$resolved" "$host" </dev/null 2>/dev/null)
