@@ -191,6 +191,7 @@ for want in \
     "identitiesonly yes" \
     "identityagent none" \
     "userknownhostsfile $HOME/.ssh/known_hosts.d/marshbox" \
+    "globalknownhostsfile /dev/null" \
     "stricthostkeychecking true"; do
     if grep -qx "$want" <<< "$mb"; then
         pass "serveserve: marshbox.local has '$want'"
@@ -202,7 +203,7 @@ done
 # Nothing else changes: other hosts keep ssh's defaults, and nothing forwards.
 for host in serveserve.local github.com 192.168.1.102 marshbox; do
     other=$(ssh -G -F "$WORK/serve_resolved" "$host" </dev/null 2>/dev/null)
-    if grep -qE '^(identityagent none|identitiesonly yes|userknownhostsfile .*known_hosts.d)' <<< "$other"; then
+    if grep -qE '^(identityagent none|identitiesonly yes|userknownhostsfile .*known_hosts.d|globalknownhostsfile /dev/null)' <<< "$other"; then
         fail "serveserve: marshbox settings leak to $host"
     else
         pass "serveserve: $host keeps default identity and trust"

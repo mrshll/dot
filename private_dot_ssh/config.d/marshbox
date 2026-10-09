@@ -8,4 +8,5 @@ Host marshbox.local
   IdentitiesOnly yes
   IdentityAgent none
   UserKnownHostsFile ~/.ssh/known_hosts.d/marshbox
+  GlobalKnownHostsFile /dev/null
   StrictHostKeyChecking yes
