@@ -2,11 +2,12 @@ README.md
 setup/
 tests/
 
-# kitty and espanso are macOS-only (GUI-only; the server is headless)
+# kitty, espanso and the Screen Sharing launcher are macOS-only (GUI-only)
 {{ if ne .chezmoi.os "darwin" }}
 .config/kitty
 .config/espanso
 .local/bin/herdr-desk
+.config/fish/functions/marshbox-screen.fish
 {{ end }}
 
 # passhd and its launch agent are macOS-only: the Mac is the machine with the
