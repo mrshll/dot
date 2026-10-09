@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Regression test for the passh RemoteForward in ~/.ssh (private_dot_ssh/).
+# Regression test for the managed ~/.ssh (private_dot_ssh/): the passh
+# RemoteForward on the Mac, the pinned marshbox route on serveserve, nothing
+# elsewhere.
 #
-# Renders the chezmoi source into a throwaway home as the Mac and as the
-# server, then asks `ssh -G` which forwards each destination would get.
+# Renders the chezmoi source into throwaway homes as the Mac, serveserve and
+# another Linux box, then asks `ssh -G` what each destination would get.
 # Nothing is applied to the real home and nothing connects anywhere.
 #
 # Usage: tests/passh_ssh_test.sh
@@ -38,7 +40,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; failures=$((failures + 1)); }
 pass() { printf 'ok:   %s\n' "$*"; }
 
 # apply OS HOME TARGET...: as if chezmoi ran on OS, apply TARGETs (relative to
-# HOME) into HOME.
+# HOME) into HOME. IS_SERVER=true renders it as serveserve.
 apply() {
     local os=$1 home=$2 target targets=()
     shift 2
@@ -47,7 +49,7 @@ apply() {
 [data]
   hostname = "test-$os"
   os = "$os"
-  is_server = false
+  is_server = ${IS_SERVER:-false}
   has_op = false
 EOF
     chezmoi apply "${targets[@]}" \
@@ -55,7 +57,7 @@ EOF
         --destination "$home" \
         --config "$WORK/chezmoi-$os.toml" \
         --cache "$WORK/cache-$os" \
-        --persistent-state "$WORK/state-$os.boltdb" \
+        --persistent-state "$home.boltdb" \
         --override-data "{\"chezmoi\":{\"os\":\"$os\"}}" \
         --no-tty --force
 }
@@ -156,23 +158,80 @@ else
     fail "mac: config became '$(cat "$bare/.ssh/config")'"
 fi
 
-# --- the server -------------------------------------------------------------
+# --- serveserve -------------------------------------------------------------
+# Reaches marshbox with its dedicated key and a pinned host key, so sync.sh can
+# run from here. It must never carry the Mac's passh forward onward.
 
-server="$WORK/server"
-mkdir -p "$server/.ssh"
-cp "$WORK/existing" "$server/.ssh/config"
+serve="$WORK/serveserve"
+mkdir -p "$serve/.ssh"
+chmod 700 "$serve/.ssh"
 
-apply linux "$server" .ssh
+IS_SERVER=true apply linux "$serve" .ssh
 
-if cmp -s "$WORK/existing" "$server/.ssh/config"; then
-    pass "server: ~/.ssh/config untouched"
+if printf "Include ~/.ssh/config.d/marshbox\n" | cmp -s - "$serve/.ssh/config"; then
+    pass "serveserve: ~/.ssh/config is only the marshbox include"
 else
-    fail "server: ~/.ssh/config changed"
+    fail "serveserve: ~/.ssh/config is '$(cat "$serve/.ssh/config")'"
 fi
-if [ ! -e "$server/.ssh/config.d" ]; then
-    pass "server: no forward fragment installed"
+[ ! -e "$serve/.ssh/config.d/passh" ] && pass "serveserve: no passh forward fragment" \
+    || fail "serveserve: config.d/passh installed"
+
+pin_fp=$(ssh-keygen -lf "$serve/.ssh/known_hosts.d/marshbox" 2>/dev/null | awk '{print $2, $3, $4}' || true)
+[ "$pin_fp" = "SHA256:NPRcirnwuOi11bukahzrKBdvl1xS2++Suy3VAtF1r+A marshbox.local (ED25519)" ] \
+    && pass "serveserve: pin holds exactly the verified marshbox host key" \
+    || fail "serveserve: pin is '$pin_fp'"
+[ "$(grep -c . "$serve/.ssh/known_hosts.d/marshbox" 2>/dev/null)" = 1 ] \
+    && pass "serveserve: pin has one key and nothing else" \
+    || fail "serveserve: pin has more than one line"
+
+sed "s|~/.ssh/|$serve/.ssh/|" "$serve/.ssh/config" > "$WORK/serve_resolved" 2>/dev/null || true
+mb=$(ssh -G -F "$WORK/serve_resolved" marshbox.local </dev/null 2>/dev/null)
+for want in \
+    "identityfile ~/.ssh/id_ed25519_marshbox" \
+    "identitiesonly yes" \
+    "identityagent none" \
+    "userknownhostsfile $HOME/.ssh/known_hosts.d/marshbox" \
+    "globalknownhostsfile /dev/null" \
+    "stricthostkeychecking true"; do
+    if grep -qx "$want" <<< "$mb"; then
+        pass "serveserve: marshbox.local has '$want'"
+    else
+        fail "serveserve: marshbox.local lacks '$want' (has: $(grep -E "^${want%% *} " <<< "$mb" | tr '\n' ';'))"
+    fi
+done
+
+# Nothing else changes: other hosts keep ssh's defaults, and nothing forwards.
+for host in serveserve.local github.com 192.168.1.102 marshbox; do
+    other=$(ssh -G -F "$WORK/serve_resolved" "$host" </dev/null 2>/dev/null)
+    if grep -qE '^(identityagent none|identitiesonly yes|userknownhostsfile .*known_hosts.d|globalknownhostsfile /dev/null)' <<< "$other"; then
+        fail "serveserve: marshbox settings leak to $host"
+    else
+        pass "serveserve: $host keeps default identity and trust"
+    fi
+done
+for host in "${FORWARDED[@]}"; do
+    got=$(forwards_for "$WORK/serve_resolved" "$host")
+    [ -z "$got" ] && pass "serveserve: $host gets no forward" \
+        || fail "serveserve: $host forwards: '$got'"
+done
+
+# --- any other Linux box (marshbox itself) ----------------------------------
+
+other="$WORK/other-linux"
+mkdir -p "$other/.ssh"
+cp "$WORK/existing" "$other/.ssh/config"
+
+apply linux "$other" .ssh
+
+if cmp -s "$WORK/existing" "$other/.ssh/config"; then
+    pass "other linux: ~/.ssh/config untouched"
 else
-    fail "server: ~/.ssh/config.d was created"
+    fail "other linux: ~/.ssh/config changed"
+fi
+if [ ! -e "$other/.ssh/config.d" ] && [ ! -e "$other/.ssh/known_hosts.d" ]; then
+    pass "other linux: no ssh fragments or pins installed"
+else
+    fail "other linux: ssh fragments were installed"
 fi
 
 echo

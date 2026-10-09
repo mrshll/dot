@@ -51,9 +51,10 @@ apt_install() {
 # --- core packages ----------------------------------------------------------
 #
 # Add packages here. Format:
-#   install <command_name> <brew_name> <apt_name|CUSTOM>
+#   install <command_name> <brew_name> <apt_name|CUSTOM|USER>
 #
-# Use CUSTOM for packages that need special install logic on Linux.
+# Use CUSTOM for packages that need special install logic on Linux, and USER
+# for custom installers that write only to $HOME and so need no sudo.
 
 install_pkg() {
     local cmd="$1" brew_name="$2" apt_name="$3"
@@ -64,7 +65,9 @@ install_pkg() {
             brew_install "$brew_name"
             ;;
         Linux)
-            if [ "$apt_name" = "CUSTOM" ]; then
+            if [ "$apt_name" = "USER" ]; then
+                "install_${cmd}_linux"
+            elif [ "$apt_name" = "CUSTOM" ]; then
                 if ! can_sudo; then
                     warn "$cmd not installed — run setup/install.sh interactively (needs sudo)"
                     return
@@ -149,6 +152,11 @@ install_nvim_linux() {
 install_chezmoi_linux() {
     info "Installing chezmoi via official installer..."
     sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+    # A failed download hands sh an empty script, which succeeds.
+    if [ ! -x "$HOME/.local/bin/chezmoi" ]; then
+        err "chezmoi install failed — nothing at ~/.local/bin/chezmoi"
+        exit 1
+    fi
     export PATH="$HOME/.local/bin:$PATH"
 }
 
@@ -169,7 +177,7 @@ install_pkg    http      httpie       httpie
 install_pkg    fzf       fzf          fzf
 install_pkg    gh        gh           gh
 install_pkg    btop      btop         btop
-install_pkg    chezmoi   chezmoi      CUSTOM
+install_pkg    chezmoi   chezmoi      USER
 
 install_pkg    op        1password-cli CUSTOM
 install_pkg    vlc       vlc          vlc

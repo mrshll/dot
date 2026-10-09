@@ -19,6 +19,17 @@ Library
 # The passh RemoteForward belongs on the machine I SSH *from*: the Mac. A server
 # carrying it onward would hand its tunnel to every host it reaches.
 {{ if ne .chezmoi.os "darwin" }}
+.ssh/config.d/passh
+{{ end }}
+
+# serveserve's route to marshbox, so sync.sh can run there (config.d/marshbox).
+{{ if not .is_server }}
+.ssh/config.d/marshbox
+.ssh/known_hosts.d
+{{ end }}
+
+# ~/.ssh/config is touched only where one of those fragments applies.
+{{ if and (ne .chezmoi.os "darwin") (not .is_server) }}
 .ssh/config
 .ssh/config.d
 {{ end }}

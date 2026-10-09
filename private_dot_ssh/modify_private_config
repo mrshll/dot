@@ -1,10 +1,12 @@
 {{- /* chezmoi:modify-template */ -}}
 {{- /*
   ~/.ssh/config is hand-maintained and not in this repo; this only guarantees
-  its first line includes the passh forward and passes the rest through.
+  its first line includes this machine's managed fragment (the passh forward on
+  the Mac, the marshbox route on serveserve) and passes the rest through.
   First line, because an Include after a Host line applies only to that Host.
 */ -}}
 {{- $include := "Include ~/.ssh/config.d/passh" -}}
+{{- if .is_server }}{{ $include = "Include ~/.ssh/config.d/marshbox" }}{{ end -}}
 {{- if ne (first (splitList "\n" .chezmoi.stdin) | trim) $include -}}
 {{ $include }}
 {{ end -}}
