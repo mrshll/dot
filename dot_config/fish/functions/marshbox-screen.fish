@@ -21,14 +21,17 @@ function marshbox-screen --description "Show marshbox's desktop in Screen Sharin
 
     # One start or stop at a time, so a concurrent run never mistakes a tunnel
     # that is still starting for a dead one and removes its socket. The lock is
-    # a kernel flock held by perl (macOS has no flock(1)) while the work runs
-    # in a child fish; the kernel drops it however that ends, so a crashed run
-    # leaves nothing to clean up. The child does not inherit the lock, so the
-    # backgrounded ssh master never holds it.
-    perl -MFcntl=:flock -e '
+    # a kernel flock (macOS has no flock(1), so perl takes it) handed to the
+    # worker fish as fd 9: the process doing the work holds it, and the kernel
+    # drops it however that process ends. The ssh master is started with fd 9
+    # closed, so the tunnel it leaves running never holds the lock.
+    perl -MFcntl=:flock -MPOSIX=dup2 -e '
         open(my $lock, ">>", shift) or die "marshbox-screen: cannot open lock: $!\n";
         for (1 .. 10) {
-            exit(system(@ARGV) == 0 ? 0 : ($? >> 8 || 1)) if flock($lock, LOCK_EX | LOCK_NB);
+            if (flock($lock, LOCK_EX | LOCK_NB)) {
+                defined dup2(fileno($lock), 9) or die "marshbox-screen: lock: $!\n";
+                exec @ARGV or die "marshbox-screen: $!\n";
+            }
             select(undef, undef, undef, 0.3);
         }
         warn "marshbox-screen: another marshbox-screen is starting or stopping the tunnel; try again\n";
@@ -58,7 +61,9 @@ function __marshbox_screen
     end
 
     if not ssh $ssh_opts -O check $dest 2>/dev/null
-        if nc -z 127.0.0.1 $port 2>/dev/null
+        # lsof, not a connection: anything reaching marshbox's VNC port without
+        # authenticating counts towards TigerVNC blacklisting this address.
+        if lsof -nP -iTCP@127.0.0.1:$port -sTCP:LISTEN -t >/dev/null 2>&1
             echo "marshbox-screen: 127.0.0.1:$port is already in use by something else; leaving it alone" >&2
             return 1
         end
@@ -67,7 +72,7 @@ function __marshbox_screen
         # With ExitOnForwardFailure, -f backgrounds only once the forward is up.
         if not ssh $ssh_opts -M -f -N -T \
                 -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
-                -L 127.0.0.1:$port:127.0.0.1:5900 $dest
+                -L 127.0.0.1:$port:127.0.0.1:5900 $dest 9>&-
             echo "marshbox-screen: could not open the tunnel to $dest" >&2
             return 1
         end
