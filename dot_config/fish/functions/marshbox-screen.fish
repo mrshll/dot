@@ -20,28 +20,22 @@ function marshbox-screen --description "Show marshbox's desktop in Screen Sharin
     end
 
     # One start or stop at a time, so a concurrent run never mistakes a tunnel
-    # that is still starting for a dead one and removes its socket.
-    set -l lock ~/.ssh/marshbox-screen.lock
-    set -l tries 10
-    while not mkdir $lock 2>/dev/null
-        set -l holder (cat $lock/pid 2>/dev/null)
-        if test -n "$holder"; and not kill -0 $holder 2>/dev/null
-            rm -rf $lock # left by a run that died
-            continue
-        end
-        set tries (math $tries - 1)
-        if test $tries -le 0
-            echo "marshbox-screen: another marshbox-screen is starting or stopping the tunnel; try again" >&2
-            return 1
-        end
-        sleep 0.3
-    end
-    echo $fish_pid >$lock/pid
-
-    __marshbox_screen $argv
-    set -l rc $status
-    rm -rf $lock
-    return $rc
+    # that is still starting for a dead one and removes its socket. The lock is
+    # a kernel flock held by perl (macOS has no flock(1)) while the work runs
+    # in a child fish; the kernel drops it however that ends, so a crashed run
+    # leaves nothing to clean up. The child does not inherit the lock, so the
+    # backgrounded ssh master never holds it.
+    perl -MFcntl=:flock -e '
+        open(my $lock, ">>", shift) or die "marshbox-screen: cannot open lock: $!\n";
+        for (1 .. 10) {
+            exit(system(@ARGV) == 0 ? 0 : ($? >> 8 || 1)) if flock($lock, LOCK_EX | LOCK_NB);
+            select(undef, undef, undef, 0.3);
+        }
+        warn "marshbox-screen: another marshbox-screen is starting or stopping the tunnel; try again\n";
+        exit 1;
+    ' ~/.ssh/marshbox-screen.lock \
+        (status fish-path) --no-config -c 'source $argv[1]; __marshbox_screen $argv[2..]' \
+        (functions --details marshbox-screen) $argv
 end
 
 function __marshbox_screen
@@ -81,10 +75,11 @@ function __marshbox_screen
 
     # The tunnel comes up whether or not anything listens on marshbox's 5900,
     # and the VNC service there is transient (gone after a logout or reboot).
-    # Read the server's protocol greeting through the tunnel before opening.
-    set -l greeting (nc -w 3 127.0.0.1 $port </dev/null 2>/dev/null | head -c 12)
-    if not string match -q 'RFB *' -- "$greeting"
-        echo "marshbox-screen: tunnel is up, but no VNC server answers on marshbox's 127.0.0.1:5900;" \
+    # Ask marshbox over the tunnel's own connection whether it listens. Never
+    # probe the VNC port itself: TigerVNC counts every unauthenticated
+    # connection towards blacklisting this address.
+    if not ssh $ssh_opts $dest 'ss -Hltn "sport = :5900"' 2>/dev/null | string match -q '*127.0.0.1:5900*'
+        echo "marshbox-screen: tunnel is up, but nothing listens on marshbox's 127.0.0.1:5900;" \
             "start its desktop-sharing service, then run this again" >&2
         return 1
     end
