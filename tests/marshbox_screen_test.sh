@@ -25,8 +25,8 @@ echo "ssh $*" >> "$STATE/log"
 ctl=""; prev=""
 for a in "$@"; do [ "$prev" = "-S" ] && ctl=$a; prev=$a; done
 case " $* " in
-    *" -O check "*) [ -e "$STATE/master" ] ;;
-    *" -O exit "*) rm -f "$STATE/master" "$STATE/listening" "$ctl" ;;
+    *" -O check "*) [ -e "$STATE/master" ] && [ -S "$ctl" -o -e "$ctl" ] ;;
+    *" -O exit "*) [ -e "$STATE/exit_fail" ] && exit 255; rm -f "$STATE/master" "$STATE/listening" "$ctl" ;;
     *" -M "*)
         [ -e "$STATE/fail_start" ] && exit 255
         touch "$STATE/master" "$STATE/listening" "$ctl" ;;
@@ -46,6 +46,7 @@ EOF
 cat > "$stubs/open" <<'EOF'
 #!/bin/sh
 echo "open $*" >> "$STATE/log"
+[ ! -e "$STATE/open_fail" ]
 EOF
 chmod +x "$stubs"/*
 
@@ -129,6 +130,44 @@ rc=$(run)
 [ "$rc" != 0 ] && [ "$(opens)" = 0 ] && grep -q "no VNC server answers" "$WORK/out" \
     && pass "no VNC server on marshbox: clear message, Screen Sharing not opened" \
     || fail "no server: exit $rc, opens $(opens): $(cat "$WORK/out")"
+
+# --- one start/stop at a time ------------------------------------------------
+lockdir="$WORK/home/.ssh/marshbox-screen.lock"
+reset
+rc=$(run)
+[ ! -e "$lockdir" ] && pass "the lock is released after a run" || fail "lock left behind"
+# Another live run holds the lock (this test's own PID stands in for it).
+reset
+mkdir "$lockdir"; echo $$ > "$lockdir/pid"
+rc=$(run)
+[ "$rc" != 0 ] && [ "$(starts)" = 0 ] && [ "$(opens)" = 0 ] && grep -q "another marshbox-screen" "$WORK/out" \
+    && [ -e "$lockdir" ] \
+    && pass "while another run holds the lock: no start, no socket removal, clear message" \
+    || fail "held lock: exit $rc, starts $(starts), opens $(opens): $(cat "$WORK/out")"
+# A lock left by a run that died is taken over.
+reset
+dead=$(sh -c 'echo $$')
+mkdir "$lockdir"; echo "$dead" > "$lockdir/pid"
+rc=$(run)
+[ "$rc" = 0 ] && [ "$(starts)" = 1 ] && [ ! -e "$lockdir" ] \
+    && pass "a lock left by a dead run is taken over" \
+    || fail "stale lock: exit $rc, starts $(starts): $(cat "$WORK/out")"
+
+# --- stop that fails is reported --------------------------------------------
+reset
+run >/dev/null
+touch "$WORK/state/exit_fail"
+rc=$(run stop)
+[ "$rc" != 0 ] && grep -q "did not stop" "$WORK/out" && pass "a failed stop is reported, not called success" \
+    || fail "failed stop: exit $rc: $(cat "$WORK/out")"
+
+# --- Screen Sharing fails to open: say so, leave the tunnel -----------------
+reset
+touch "$WORK/state/open_fail"
+rc=$(run)
+[ "$rc" != 0 ] && [ -e "$WORK/state/master" ] && grep -q "tunnel stays up" "$WORK/out" \
+    && pass "viewer launch failure: non-zero, tunnel kept and said so" \
+    || fail "open failure: exit $rc: $(cat "$WORK/out")"
 
 # --- usage -------------------------------------------------------------------
 reset

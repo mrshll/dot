@@ -1,31 +1,66 @@
 function marshbox-screen --description "Show marshbox's desktop in Screen Sharing over an SSH tunnel"
     # marshbox's VNC server listens on its own 127.0.0.1:5900 only; this
     # carries it to 127.0.0.1:15900 here and opens Apple Screen Sharing on it.
-    # `marshbox-screen stop` ends the tunnel.
+    # Closing Screen Sharing leaves the tunnel up for next time;
+    # `marshbox-screen stop` ends it (and any viewer using it), but never the
+    # VNC service on marshbox.
     #
     # -F /dev/null leaves ~/.ssh/config out so the passh RemoteForward is not
     # requested again (a session already holding it would make this exit);
     # identity and trust are given explicitly instead. The tunnel is an ssh
     # control master on its own socket, so later runs reuse it and `stop` ends
-    # exactly that connection, never anything else on the port.
+    # exactly that connection, never anything else on the port. A reused
+    # master keeps the forward it started with: after changing the endpoint
+    # here, `stop` first.
+    switch "$argv[1]"
+        case '' stop
+        case '*'
+            echo "usage: marshbox-screen [stop]" >&2
+            return 2
+    end
+
+    # One start or stop at a time, so a concurrent run never mistakes a tunnel
+    # that is still starting for a dead one and removes its socket.
+    set -l lock ~/.ssh/marshbox-screen.lock
+    set -l tries 10
+    while not mkdir $lock 2>/dev/null
+        set -l holder (cat $lock/pid 2>/dev/null)
+        if test -n "$holder"; and not kill -0 $holder 2>/dev/null
+            rm -rf $lock # left by a run that died
+            continue
+        end
+        set tries (math $tries - 1)
+        if test $tries -le 0
+            echo "marshbox-screen: another marshbox-screen is starting or stopping the tunnel; try again" >&2
+            return 1
+        end
+        sleep 0.3
+    end
+    echo $fish_pid >$lock/pid
+
+    __marshbox_screen $argv
+    set -l rc $status
+    rm -rf $lock
+    return $rc
+end
+
+function __marshbox_screen
     set -l port 15900
     set -l dest marsh@marshbox.local
     set -l ssh_opts -F /dev/null -S ~/.ssh/marshbox-screen.sock \
         -o IdentitiesOnly=yes -o IdentityAgent=none -i ~/.ssh/id_ed25519_marshbox \
         -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts
 
-    switch "$argv[1]"
-        case ''
-        case stop
-            if ssh $ssh_opts -O check $dest 2>/dev/null
-                ssh $ssh_opts -O exit $dest 2>/dev/null
-            else
-                echo "marshbox-screen: no tunnel running"
-            end
+    if test "$argv[1]" = stop
+        if not ssh $ssh_opts -O check $dest 2>/dev/null
+            echo "marshbox-screen: no tunnel running"
             return 0
-        case '*'
-            echo "usage: marshbox-screen [stop]" >&2
-            return 2
+        end
+        if not ssh $ssh_opts -O exit $dest 2>/dev/null
+            echo "marshbox-screen: the tunnel did not stop" >&2
+            return 1
+        end
+        return 0
     end
 
     if not ssh $ssh_opts -O check $dest 2>/dev/null
@@ -33,7 +68,7 @@ function marshbox-screen --description "Show marshbox's desktop in Screen Sharin
             echo "marshbox-screen: 127.0.0.1:$port is already in use by something else; leaving it alone" >&2
             return 1
         end
-        # A socket left by a tunnel that died; nothing answers on it.
+        # Under the lock, a socket nothing answers on is left by a dead tunnel.
         rm -f ~/.ssh/marshbox-screen.sock
         # With ExitOnForwardFailure, -f backgrounds only once the forward is up.
         if not ssh $ssh_opts -M -f -N -T \
@@ -54,5 +89,8 @@ function marshbox-screen --description "Show marshbox's desktop in Screen Sharin
         return 1
     end
 
-    open -a "Screen Sharing" vnc://127.0.0.1:$port
+    if not open -a "Screen Sharing" vnc://127.0.0.1:$port
+        echo "marshbox-screen: could not open Screen Sharing; the tunnel stays up (marshbox-screen stop ends it)" >&2
+        return 1
+    end
 end
