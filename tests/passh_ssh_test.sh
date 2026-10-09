@@ -65,11 +65,13 @@ EOF
         --no-tty --force
 }
 
-# private_ssh LABEL HOME: ssh refuses an Include target that is group or
-# world writable ("Bad owner or permissions"), which breaks every connection.
+# private_ssh LABEL HOME: upstream ssh refuses a group- or world-writable file
+# read through the user config, Include targets included ("Bad owner or
+# permissions"); some distributions relax this for single-user groups.
+# BSD-compatible find: either write bit.
 private_ssh() {
     local loose
-    loose=$(find "$2/.ssh" -perm /022 2>/dev/null)
+    loose=$(find "$2/.ssh" \( -perm -020 -o -perm -002 \) -print)
     [ -z "$loose" ] && pass "$1: nothing under ~/.ssh is group or world writable" \
         || fail "$1: group/world writable: $(tr "\n" " " <<< "$loose")"
 }
@@ -178,6 +180,11 @@ fi
 serve="$WORK/serveserve"
 mkdir -p "$serve/.ssh"
 chmod 700 "$serve/.ssh"
+# A previous apply under umask 002 left these loose; apply must tighten them.
+mkdir -p "$serve/.ssh/config.d" "$serve/.ssh/known_hosts.d"
+touch "$serve/.ssh/config.d/marshbox" "$serve/.ssh/known_hosts.d/marshbox"
+chmod 775 "$serve/.ssh/config.d" "$serve/.ssh/known_hosts.d"
+chmod 664 "$serve/.ssh/config.d/marshbox" "$serve/.ssh/known_hosts.d/marshbox"
 
 IS_SERVER=true apply linux "$serve" .ssh
 private_ssh serveserve "$serve"
