@@ -45,28 +45,39 @@ check "claude, elsewhere: no agent gitconfig, env untouched" '[ "$(jq -c .env <<
 
 # --- Codex config ------------------------------------------------------------
 for server in true false; do render dot_codex/modify_private_config.toml.tmpl "$server" > "$WORK/codex-$server.sh"; done
-cat > "$WORK/codex-live.toml" <<'EOF'
-model = "kept"
-
-[shell_environment_policy]
-inherit = "core"
-
-[shell_environment_policy.set]
-GIT_CONFIG_GLOBAL = "/somewhere/else"
-
-[mcp_servers.other]
-url = "https://example.com/mcp"
-EOF
-sh "$WORK/codex-true.sh" < "$WORK/codex-live.toml" > "$WORK/codex-1.toml"
-out=$(toml < "$WORK/codex-1.toml")
-check "codex, serveserve: commands get the agent gitconfig" \
-    '[ "$(jq -c .shell_environment_policy.set <<<"$out")" = "{\"GIT_CONFIG_GLOBAL\":\"$AGENT_CONFIG\"}" ]'
-check "codex, serveserve: the rest of the live config survives" \
-    '[ "$(jq -r ".model, .shell_environment_policy.inherit, .mcp_servers.other.url" <<<"$out" | tr "\n" " ")" = "kept core https://example.com/mcp " ]'
-sh "$WORK/codex-true.sh" < "$WORK/codex-1.toml" > "$WORK/codex-2.toml"
-check "codex, serveserve: applying again changes nothing" 'cmp -s "$WORK/codex-1.toml" "$WORK/codex-2.toml"'
-out=$(sh "$WORK/codex-false.sh" < /dev/null | toml)
-check "codex, elsewhere: no agent gitconfig" '[ "$(jq -c .shell_environment_policy <<<"$out")" = null ]'
+# Live configs, each valid TOML, holding an unrelated KEPT variable in a
+# different spelling of shell_environment_policy.set.
+mkdir -p "$WORK/live"
+printf 'model = "kept"\n\n[shell_environment_policy.set]\nKEPT = "yes"\nGIT_CONFIG_GLOBAL = "/somewhere/else"\n\n[mcp_servers.other]\nurl = "https://example.com/mcp"\n' > "$WORK/live/table.toml"
+printf 'model = "kept"\n\n  [shell_environment_policy.set]  # indented\n  KEPT = "yes"\n' > "$WORK/live/indented.toml"
+printf 'model = "kept"\n\n[shell_environment_policy]\ninherit = "core"\nset = { KEPT = "yes" }\n' > "$WORK/live/inline.toml"
+printf 'model = "kept"\n\n[shell_environment_policy]\nset.KEPT = "yes"\n' > "$WORK/live/dotted.toml"
+printf 'model = "kept"\n\n[shell_environment_policy."set"]\nKEPT = "yes"\n' > "$WORK/live/quoted.toml"
+printf 'model = "kept"\n' > "$WORK/live/none.toml"
+# json FILE: the TOML as JSON, Cloudflare MCP entries (managed here) left out.
+json() { toml < "$1" | jq -cS 'del(.mcp_servers.cloudflare, .mcp_servers["cloudflare-docs"], .mcp_servers["cloudflare-bindings"], .mcp_servers["cloudflare-builds"], .mcp_servers["cloudflare-observability"]) | if .mcp_servers == {} then del(.mcp_servers) else . end'; }
+for live in "$WORK"/live/*.toml; do
+    name=$(basename "$live" .toml)
+    for server in true false; do
+        sh "$WORK/codex-$server.sh" < "$live" > "$WORK/out-$name-$server.toml" 2>"$WORK/err-$name-$server"
+        if ! got=$(json "$WORK/out-$name-$server.toml" 2>/dev/null); then
+            fail "codex ($name, server=$server): output is not valid TOML"; continue
+        fi
+        want=$(json "$live")
+        case "$server-$name" in
+            true-table|true-indented|true-none)
+                want=$(jq -cS --arg g "$AGENT_CONFIG" '.shell_environment_policy.set.GIT_CONFIG_GLOBAL = $g' <<<"$want") ;;
+            true-*)
+                grep -q "GIT_CONFIG_GLOBAL not set" "$WORK/err-$name-$server" \
+                    && pass "codex ($name): a form it does not edit is left alone, with a warning" \
+                    || fail "codex ($name): no warning for a form it does not edit" ;;
+        esac
+        [ "$got" = "$want" ] && pass "codex ($name, server=$server): only the managed key changes" \
+            || fail "codex ($name, server=$server): got $got, want $want"
+        sh "$WORK/codex-$server.sh" < "$WORK/out-$name-$server.toml" 2>/dev/null > "$WORK/again.toml"
+        cmp -s "$WORK/out-$name-$server.toml" "$WORK/again.toml" || fail "codex ($name, server=$server): applying again changes it"
+    done
+done
 
 # --- what git does with it ---------------------------------------------------
 render dot_config/git/agent.gitconfig.tmpl true > "$WORK/agent.gitconfig"

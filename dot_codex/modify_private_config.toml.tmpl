@@ -2,23 +2,38 @@
 # Preserve Codex-managed local state; manage only Cloudflare MCP entries and,
 # on serveserve, the git identity of the commands Codex runs.
 set -eu
-awk '
-/^\[/ {
-    skip = ($0 ~ /^\[mcp_servers\.(cloudflare|cloudflare-docs|cloudflare-bindings|cloudflare-builds|cloudflare-observability)(\]|\.)/) ||
-        ($0 ~ /^\[shell_environment_policy\.set\]/)
-}
-!skip { print }
-'
-{{- if .is_server }}
+{{ if .is_server -}}
 # serveserve: Codex's commands run git as mrshll-agent, authoring and signing
 # with its key (dot_config/git/agent.gitconfig.tmpl). Marsh's own shells keep
-# ~/.gitconfig.
-cat <<'TOML'
-[shell_environment_policy.set]
-GIT_CONFIG_GLOBAL = {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}
-
-TOML
+# ~/.gitconfig. Only this one key of shell_environment_policy.set is managed.
+managed='GIT_CONFIG_GLOBAL = {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}'
+{{- else -}}
+managed=
 {{- end }}
+awk -v managed="$managed" '
+/^[ \t]*\[/ {
+    skip = ($0 ~ /^\[mcp_servers\.(cloudflare|cloudflare-docs|cloudflare-bindings|cloudflare-builds|cloudflare-observability)(\]|\.)/)
+    inset = ($0 ~ /^[ \t]*\[[ \t]*shell_environment_policy[ \t]*\.[ \t]*set[ \t]*\][ \t]*(#.*)?$/)
+    inpolicy = ($0 ~ /^[ \t]*\[[ \t]*shell_environment_policy[ \t]*\][ \t]*(#.*)?$/)
+    # Any other spelling of the table (quoted, nested) is left alone.
+    if ($0 ~ /shell_environment_policy/ && !inset && !inpolicy) other = 1
+    if (inset && managed != "") { print; print managed; done = 1; next }
+}
+# The managed key replaces whatever value the table had for it.
+inset && managed != "" && /^[ \t]*"?GIT_CONFIG_GLOBAL"?[ \t]*=/ { next }
+# set as an inline table or dotted keys: valid TOML this script does not edit.
+inpolicy && /^[ \t]*"?set"?[ \t]*[.=]/ { other = 1 }
+/^[ \t]*"?shell_environment_policy"?[ \t]*\./ { other = 1 }
+!skip { print }
+END {
+    if (managed == "" || done) exit
+    if (other) {
+        print "codex config: shell_environment_policy.set is in a form this script does not edit; GIT_CONFIG_GLOBAL not set" > "/dev/stderr"
+        exit
+    }
+    printf "\n[shell_environment_policy.set]\n%s\n", managed
+}
+'
 cat <<'TOML'
 [mcp_servers.cloudflare]
 url = "https://mcp.cloudflare.com/mcp"
