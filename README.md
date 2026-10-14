@@ -56,7 +56,7 @@ display: [Deskflow](https://github.com/deskflow/deskflow) with the Mac as
 server and marshbox as client, TLS on and both fingerprints trusted. marshbox
 sits to the right of the Mac (`Library/Deskflow/deskflow-server.conf`).
 
-It works on the home LAN only: both ends use the Mac's home LAN address,
+It's meant for the home LAN only: both ends use the Mac's home LAN address,
 never a Tailscale name or 100.x address. The Mac has a DHCP reservation on
 the home router. The server listens on that address alone,
 read from `~/Library/Deskflow/listen-address`, and marshbox connects to it,
