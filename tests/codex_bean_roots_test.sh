@@ -22,15 +22,16 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; failures=$((failures + 1)); }
 pass() { printf 'ok:   %s\n' "$*"; }
 check() { if eval "$2"; then pass "$1"; else fail "$1"; fi; }
 
-# render IS_SERVER [TOGGLE]: the modifier as chezmoi renders it on Linux; with
-# TOGGLE (manage or bean), on serveserve with that toggle set to false.
+# render IS_SERVER [TOGGLE...]: the modifier as chezmoi renders it on Linux,
+# with each TOGGLE (manage, bean) set to false.
 render() {
-    local tmpl="$REPO_DIR/$TEMPLATE"
-    if [ -n "${2:-}" ]; then
-        sed "s/{{- \$$2 := .is_server }}/{{- \$$2 := false }}/" "$tmpl" > "$WORK/rollback.tmpl"
-        grep -q "\$$2 := false" "$WORK/rollback.tmpl" || { echo "no \$$2 toggle in $TEMPLATE" >&2; return 1; }
-        tmpl="$WORK/rollback.tmpl"
-    fi
+    local tmpl="$REPO_DIR/$TEMPLATE" toggle
+    cp "$tmpl" "$WORK/rollback.tmpl"
+    for toggle in "${@:2}"; do
+        sed -i "s/{{- \$$toggle := .is_server }}/{{- \$$toggle := false }}/" "$WORK/rollback.tmpl"
+        grep -q "\$$toggle := false" "$WORK/rollback.tmpl" || { echo "no \$$toggle toggle in $TEMPLATE" >&2; return 1; }
+    done
+    tmpl="$WORK/rollback.tmpl"
     printf '[data]\n  hostname = "test"\n  os = "linux"\n  is_server = %s\n  has_op = false\n' "$1" > "$WORK/chezmoi.toml"
     chezmoi execute-template --file "$tmpl" --source "$REPO_DIR" --config "$WORK/chezmoi.toml" \
         --override-data '{"chezmoi":{"os":"linux"}}'
@@ -39,6 +40,7 @@ render true > "$WORK/server.sh"
 render false > "$WORK/elsewhere.sh"
 render true bean > "$WORK/rollback.sh"
 render true manage > "$WORK/no-identity.sh"
+render true manage bean > "$WORK/rolled-back.sh"
 
 # json FILE: the TOML as JSON, leaving out what the modifier manages besides
 # Bean's roots (Cloudflare MCP entries and the agent environment). An empty
@@ -194,6 +196,25 @@ check "bean rolled back: the agent environment stays" \
     'uv run --no-project python -I -c "import sys, tomllib; c = tomllib.load(open(sys.argv[1], \"rb\")); sys.exit(c[\"shell_environment_policy\"][\"set\"][\"GH_CONFIG_DIR\"] != sys.argv[2])" "$WORK/out.toml" "$HOME/.config/gh-agent"'
 sh "$WORK/no-identity.sh" < "$WORK/both.toml" > "$WORK/out.toml"
 check "identity rolled back: Bean's roots stay" '[ "$(json "$WORK/out.toml")" = "$(json "$WORK/both.toml")" ]'
+
+# Without uv nothing checks the result: elsewhere it is still emitted, so a
+# Bean path in a form the script does not edit fails the apply rather than
+# stay; on serveserve, with both toggles rolled back, uv is still required.
+mkdir -p "$WORK/nouv"
+ln -s "$(command -v awk)" "$WORK/nouv/awk"; ln -s "$(command -v cat)" "$WORK/nouv/cat"
+nouv() { HOME="$WORK/nouv" PATH="$WORK/nouv" /bin/sh "$@"; }
+printf '["sandbox_workspace_write"]\nwritable_roots = ["%s"]\n' "$DATA" > "$WORK/quoted-bean.toml"
+nouv "$WORK/elsewhere.sh" < "$WORK/quoted-bean.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
+check "elsewhere, no uv: a Bean path in a form it does not edit fails the apply" \
+    '[ "$rc" -ne 0 ] && grep -q "form this script does not edit" "$WORK/err" && [ ! -s "$WORK/out.toml" ]'
+nouv "$WORK/elsewhere.sh" < "$WORK/server-table.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
+check "elsewhere, no uv: Bean's paths still come out of a table" \
+    '[ "$rc" -eq 0 ] && [ "$(json "$WORK/out.toml")" = "$(json "$WORK/live/table.toml")" ]'
+nouv "$WORK/rolled-back.sh" < "$WORK/server-table.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
+check "serveserve, both rolled back, no uv: the apply fails rather than go unchecked" \
+    '[ "$rc" -ne 0 ] && grep -q "uv not found to check" "$WORK/err" && [ ! -s "$WORK/out.toml" ]'
+sh "$WORK/rolled-back.sh" < "$WORK/server-table.toml" > "$WORK/out.toml"
+check "serveserve, both rolled back: Bean's paths come out" '[ "$(json "$WORK/out.toml")" = "$(json "$WORK/live/table.toml")" ]'
 
 echo
 [ "$failures" -eq 0 ] && echo "all passed" || { echo "$failures failure(s)" >&2; exit 1; }

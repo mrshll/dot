@@ -148,6 +148,8 @@ BEGIN {
     beanroots = "[\"" beandata "\", \"" beanconfig "\"]"
     section = "top"
 }
+# mentions: a Bean path appears somewhere, so a form this does not edit may hold it.
+index($0, beandata) || index($0, beanconfig) { mentions = 1 }
 # Inside writable_roots: gather it until it closes.
 incoll { coll = coll "\n" $0; roots(); next }
 # Inside a multi-line string: copy it as it is, whatever it looks like.
@@ -194,8 +196,9 @@ END {
     if (incoll) { swother = rootsseen = 1; print coll }
     endsection()
     if (bean && !rootsseen && !added && !swtable && !swdotted && !swother) printf "\n[sandbox_workspace_write]\nwritable_roots = %s\n", beanroots
-    # Not editing it fails the apply where the Bean paths go in, or have to come out.
-    if (swfail || bean && swother) {
+    # Not editing it fails the apply where the Bean paths go in, or may have to
+    # come out: without uv, nothing else would notice them left in.
+    if (swfail || swother && (bean || mentions)) {
         print "codex config: sandbox_workspace_write.writable_roots is in a form this script does not edit;" > "/dev/stderr"
         print "  make it an array of one-line strings without escapes or comments inside, in a plain" > "/dev/stderr"
         print "  [sandbox_workspace_write] table or as a top-level dotted key, then apply again" > "/dev/stderr"
@@ -233,8 +236,8 @@ TOML
 # order with the Bean paths appended or removed, and equal the live config in
 # everything else (Cloudflare entries aside), or apply fails and leaves the live
 # file as it is. sync.sh's ssh shell may not have uv on PATH. Without uv the
-# check is required only where the agent environment or Bean's roots are
-# managed.
+# check is required on serveserve, whichever toggles are rolled back, and
+# skipped elsewhere.
 uv=$(command -v uv || { for u in "$HOME/.local/bin/uv" /opt/homebrew/bin/uv; do [ -x "$u" ] && echo "$u" && break; done; } || true)
 if [ -n "$uv" ]; then
 tmp=$(mktemp -d)
@@ -290,7 +293,7 @@ if roots(out) != want:
 if unmanaged(live) != unmanaged(out):
     sys.exit("codex config: the result changes more than the managed keys; not applied")
 ' "$tmp/live.toml" "$tmp/out.toml" "$gitconfig" "$ghconfig" "$manage" "$bean" "$beandata" "$beanconfig"
-elif [ -n "$manage$bean" ]; then
+elif [ "{{ .is_server }}" = true ]; then
     echo "codex config: uv not found to check the result; not applied" >&2
     exit 1
 else
