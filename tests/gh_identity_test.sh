@@ -80,7 +80,9 @@ check "agent-gh: SSH remotes go over HTTPS" 'grep -qx "git@github.com:" <<<"$out
 check "agent-gh: looks the token up by user, never the active account" \
     'grep -q "^auth token --hostname github.com --user mrshll-agent|" "$WORK/gh.log" && ! grep -q "marsh" <<<"$out"'
 
-out=$(run env GH_TOKEN=marsh-inherited GITHUB_TOKEN=marsh-too bash "$AGENT_GH" probe)
+out=$(run env GH_TOKEN=marsh-inherited GITHUB_TOKEN=marsh-too GH_CONFIG_DIR="$WORK/elsewhere" bash "$AGENT_GH" probe)
+check "agent-gh: looks in the config --seed wrote, whatever GH_CONFIG_DIR is inherited" \
+    '[ "$(head -n1 "$WORK/gh-env.log")" = "GH_HOST= GH_CONFIG_DIR=$WORK/home/.config/gh" ]'
 check "agent-gh: an inherited GH_TOKEN is neither used nor passed on" \
     'grep -qx "GH_TOKEN=agent-stored-token" <<<"$out" && grep -q "|GH_TOKEN=$" "$WORK/gh.log"'
 check "agent-gh: an inherited GITHUB_TOKEN is dropped" 'grep -qx "GITHUB_TOKEN=" <<<"$out"'
@@ -99,7 +101,7 @@ rm -f "$WORK/login-stdin" "$WORK/stored"
 run env GH_HOST=ghe.example.com GH_CONFIG_DIR="$WORK/elsewhere" bash "$AGENT_GH" --seed >/dev/null 2>&1 && seeded=0 || seeded=$?
 check "agent-gh --seed: succeeds" '[ "$seeded" -eq 0 ]'
 check "agent-gh --seed: github.com and gh's default config, whatever was inherited" \
-    '[ "$(sort -u "$WORK/gh-env.log")" = "GH_HOST= GH_CONFIG_DIR=" ]'
+    '[ "$(sort -u "$WORK/gh-env.log")" = "GH_HOST= GH_CONFIG_DIR=$WORK/home/.config/gh" ]'
 check "agent-gh --seed: checks whose token it is before storing it" \
     'grep -q "^api --hostname github.com user --jq .login|GH_TOKEN=resolved:op://Private/Github agent/Token$" "$WORK/gh.log"'
 check "agent-gh --seed: one passh call for the agent item, not as GH_TOKEN" \
