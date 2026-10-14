@@ -46,6 +46,12 @@ check "claude, serveserve: a fresh machine gets it too" \
     '[ "$(jq -cS .env <<<"$out")" = "{\"GH_CONFIG_DIR\":\"$AGENT_GH\",\"GIT_CONFIG_GLOBAL\":\"$AGENT_CONFIG\"}" ]'
 out=$(bash "$WORK/claude-false.sh" <<<"$live")
 check "claude, elsewhere: no agent gitconfig, env untouched" '[ "$(jq -c .env <<<"$out")" = "{\"KEPT\":\"1\"}" ]'
+out=$(bash "$WORK/claude-false.sh" <<<'{"theme":"dark"}')
+check "claude, elsewhere: no env added" '[ "$(jq -c . <<<"$out" | jq "has(\"env\")")" = false ]'
+out=$(bash "$WORK/claude-true.sh" <<<"$live" | bash "$WORK/claude-false.sh")
+check "claude, rolled back: the agent values are removed, env set by hand stays" '[ "$(jq -c .env <<<"$out")" = "{\"KEPT\":\"1\"}" ]'
+out=$(bash "$WORK/claude-false.sh" <<<'{"env":{"GH_CONFIG_DIR":"/mine"}}')
+check "claude, elsewhere: a GH_CONFIG_DIR set by hand stays" '[ "$(jq -r .env.GH_CONFIG_DIR <<<"$out")" = /mine ]'
 
 # --- Codex config ------------------------------------------------------------
 for server in true false; do render dot_codex/modify_private_config.toml.tmpl "$server" > "$WORK/codex-$server.sh"; done
@@ -54,35 +60,57 @@ for server in true false; do render dot_codex/modify_private_config.toml.tmpl "$
 mkdir -p "$WORK/live"
 printf 'model = "kept"\n\n[shell_environment_policy.set]\nKEPT = "yes"\nGIT_CONFIG_GLOBAL = "/somewhere/else"\nGH_CONFIG_DIR = "/home/x/.config/gh"\n\n[mcp_servers.other]\nurl = "https://example.com/mcp"\n' > "$WORK/live/table.toml"
 printf 'model = "kept"\n\n  [shell_environment_policy.set]  # indented\n  KEPT = "yes"\n' > "$WORK/live/indented.toml"
-printf 'model = "kept"\n\n[shell_environment_policy]\ninherit = "core"\nset = { KEPT = "yes" }\n' > "$WORK/live/inline.toml"
-printf 'model = "kept"\n\n[shell_environment_policy]\nset.KEPT = "yes"\n' > "$WORK/live/dotted.toml"
-printf 'model = "kept"\n\n[shell_environment_policy."set"]\nKEPT = "yes"\n' > "$WORK/live/quoted.toml"
+printf "model = 'kept'\n\n[shell_environment_policy.set]\nKEPT = 'yes'\n'GH_CONFIG_DIR' = '/old'\n\"GIT_CONFIG_GLOBAL\" = '/old'\n" > "$WORK/live/literal-keys.toml"
 printf 'model = "kept"\n' > "$WORK/live/none.toml"
+# Forms the script does not edit: on serveserve, apply must fail rather than
+# install a broken config or one without the agent identity.
+printf 'model = "kept"\n\n[shell_environment_policy]\ninherit = "core"\nset = { KEPT = "yes" }\n' > "$WORK/live/inline.toml"
+printf 'model = "kept"\nshell_environment_policy = { set = { KEPT = "yes" } }\n' > "$WORK/live/root-inline.toml"
+printf 'model = "kept"\n\n[shell_environment_policy]\nset.KEPT = "yes"\n' > "$WORK/live/dotted.toml"
+printf "model = 'kept'\n\n[shell_environment_policy]\n'set'.KEPT = 'yes'\n" > "$WORK/live/literal-dotted.toml"
+printf 'model = "kept"\n\n[shell_environment_policy."set"]\nKEPT = "yes"\n' > "$WORK/live/quoted.toml"
+printf 'model = "kept"\n\n[shell_environment_policy.set]\nKEPT = "yes"\nGH_CONFIG_DIR = """\n/old\n"""\n' > "$WORK/live/multiline.toml"
 # json FILE: the TOML as JSON, Cloudflare MCP entries (managed here) left out.
 json() { toml < "$1" | jq -cS 'del(.mcp_servers.cloudflare, .mcp_servers["cloudflare-docs"], .mcp_servers["cloudflare-bindings"], .mcp_servers["cloudflare-builds"], .mcp_servers["cloudflare-observability"]) | if .mcp_servers == {} then del(.mcp_servers) else . end'; }
 for live in "$WORK"/live/*.toml; do
     name=$(basename "$live" .toml)
+    json "$live" >/dev/null || { fail "codex fixture $name is not valid TOML"; continue; }
     for server in true false; do
-        sh "$WORK/codex-$server.sh" < "$live" > "$WORK/out-$name-$server.toml" 2>"$WORK/err-$name-$server"
+        sh "$WORK/codex-$server.sh" < "$live" > "$WORK/out-$name-$server.toml" 2>"$WORK/err-$name-$server" && rc=0 || rc=$?
+        case "$server-$name" in
+            true-inline|true-root-inline|true-dotted|true-literal-dotted|true-quoted|true-multiline)
+                [ "$rc" -ne 0 ] && grep -q "form this script does not edit" "$WORK/err-$name-$server" \
+                    && pass "codex ($name): a form it does not edit fails the apply, with the reason" \
+                    || fail "codex ($name): rc=$rc for a form it does not edit"
+                continue ;;
+        esac
+        [ "$rc" -eq 0 ] || { fail "codex ($name, server=$server): exit $rc: $(cat "$WORK/err-$name-$server")"; continue; }
         if ! got=$(json "$WORK/out-$name-$server.toml" 2>/dev/null); then
             fail "codex ($name, server=$server): output is not valid TOML"; continue
         fi
         want=$(json "$live")
         case "$server-$name" in
-            true-table|true-indented|true-none)
+            true-*)
                 want=$(jq -cS --arg g "$AGENT_CONFIG" --arg h "$AGENT_GH" \
                     '.shell_environment_policy.set.GIT_CONFIG_GLOBAL = $g | .shell_environment_policy.set.GH_CONFIG_DIR = $h' <<<"$want") ;;
-            true-*)
-                grep -q "GIT_CONFIG_GLOBAL and GH_CONFIG_DIR not set" "$WORK/err-$name-$server" \
-                    && pass "codex ($name): a form it does not edit is left alone, with a warning" \
-                    || fail "codex ($name): no warning for a form it does not edit" ;;
         esac
-        [ "$got" = "$want" ] && pass "codex ($name, server=$server): only the managed key changes" \
+        [ "$got" = "$want" ] && pass "codex ($name, server=$server): only the managed keys change" \
             || fail "codex ($name, server=$server): got $got, want $want"
         sh "$WORK/codex-$server.sh" < "$WORK/out-$name-$server.toml" 2>/dev/null > "$WORK/again.toml"
         cmp -s "$WORK/out-$name-$server.toml" "$WORK/again.toml" || fail "codex ($name, server=$server): applying again changes it"
     done
 done
+# A live config that is already broken is not made worse or installed.
+printf 'model = "kept"\nmodel = "twice"\n' | sh "$WORK/codex-true.sh" >/dev/null 2>"$WORK/err-broken" && rc=0 || rc=$?
+check "codex, serveserve: a result that does not parse fails the apply" \
+    '[ "$rc" -ne 0 ] && grep -q "would not be valid TOML" "$WORK/err-broken"'
+# Rolling back (or any other machine): the keys this set are removed; the same
+# keys holding something else, and everything else, stay.
+sh "$WORK/codex-true.sh" < "$WORK/live/table.toml" | sh "$WORK/codex-false.sh" > "$WORK/rolled.toml"
+check "codex, rolled back: the agent values are removed, everything else stays" \
+    '[ "$(json "$WORK/rolled.toml")" = "$(json "$WORK/live/table.toml" | jq -cS "del(.shell_environment_policy.set.GIT_CONFIG_GLOBAL, .shell_environment_policy.set.GH_CONFIG_DIR)")" ]'
+printf '[shell_environment_policy.set]\nGH_CONFIG_DIR = "/mine"\n' | sh "$WORK/codex-false.sh" > "$WORK/mine.toml"
+check "codex, elsewhere: a GH_CONFIG_DIR set by hand stays" '[ "$(json "$WORK/mine.toml" | jq -r .shell_environment_policy.set.GH_CONFIG_DIR)" = /mine ]'
 
 # --- what git does with it ---------------------------------------------------
 render dot_config/git/agent.gitconfig.tmpl true > "$WORK/agent.gitconfig"

@@ -100,12 +100,15 @@ enforced='{
 # serveserve: Claude Code's commands run gh and git as mrshll-agent: gh reads
 # the agents' config (agent-gh --seed), and git authors and signs with its key
 # and pushes over HTTPS with that login (dot_config/git/agent.gitconfig.tmpl).
-# Marsh's own shells keep ~/.config/gh and ~/.gitconfig.
-{{ if .is_server -}}
-env_enforced='{
+# Marsh's own shells keep ~/.config/gh and ~/.gitconfig. Everywhere else, and
+# to roll back (make the condition false), the two keys are removed where they
+# still hold these values: nothing but this script puts them there.
+agent_env='{
   "GIT_CONFIG_GLOBAL": {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }},
   "GH_CONFIG_DIR": {{ joinPath .chezmoi.homeDir ".config/gh-agent" | quote }}
 }'
+{{ if .is_server -}}
+env_enforced=$agent_env
 {{- else -}}
 env_enforced='{}'
 {{- end }}
@@ -114,6 +117,8 @@ jq -n \
   --argjson defaults "$defaults" \
   --argjson live "$live" \
   --argjson enforced "$enforced" \
+  --argjson agent_env "$agent_env" \
   --argjson env_enforced "$env_enforced" \
   '$defaults + $live + $enforced
-   | if $env_enforced == {} then . else .env = (($live.env // {}) + $env_enforced) end'
+   | .env = ((($live.env // {}) | with_entries(select(.value != $agent_env[.key]))) + $env_enforced)
+   | if .env == {} and ($live | has("env") | not) then del(.env) else . end'

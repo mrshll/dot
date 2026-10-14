@@ -2,40 +2,53 @@
 # Preserve Codex-managed local state; manage only Cloudflare MCP entries and,
 # on serveserve, the GitHub identity of the commands Codex runs.
 set -eu
-{{ if .is_server -}}
 # serveserve: Codex's commands run gh and git as mrshll-agent: gh reads the
 # agents' config (agent-gh --seed), and git authors and signs with its key and
 # pushes over HTTPS with that login (dot_config/git/agent.gitconfig.tmpl).
-# Marsh's own shells keep ~/.config/gh and ~/.gitconfig. Only these keys of
-# shell_environment_policy.set are managed; awk -v turns \n into newlines.
-managed='GIT_CONFIG_GLOBAL = {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}\nGH_CONFIG_DIR = {{ joinPath .chezmoi.homeDir ".config/gh-agent" | quote }}'
+# Marsh's own shells keep ~/.config/gh and ~/.gitconfig. Only these two keys of
+# a plain [shell_environment_policy.set] table are managed. Everywhere else,
+# and to roll back (make the condition false), they are removed where they
+# still hold these values: nothing but this script puts them there.
+gitconfig={{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}
+ghconfig={{ joinPath .chezmoi.homeDir ".config/gh-agent" | quote }}
+{{ if .is_server -}}
+manage=1
 {{- else -}}
-managed=
+manage=
 {{- end }}
-awk -v managed="$managed" '
+out=$(awk -v manage="$manage" -v gitconfig="$gitconfig" -v ghconfig="$ghconfig" '
+BEGIN { if (manage) managed = "GIT_CONFIG_GLOBAL = \"" gitconfig "\"\nGH_CONFIG_DIR = \"" ghconfig "\"" }
 /^[ \t]*\[/ {
     skip = ($0 ~ /^\[mcp_servers\.(cloudflare|cloudflare-docs|cloudflare-bindings|cloudflare-builds|cloudflare-observability)(\]|\.)/)
     inset = ($0 ~ /^[ \t]*\[[ \t]*shell_environment_policy[ \t]*\.[ \t]*set[ \t]*\][ \t]*(#.*)?$/)
     inpolicy = ($0 ~ /^[ \t]*\[[ \t]*shell_environment_policy[ \t]*\][ \t]*(#.*)?$/)
-    # Any other spelling of the table (quoted, nested) is left alone.
+    # Any other spelling of the table (quoted, nested) is one this does not edit.
     if ($0 ~ /shell_environment_policy/ && !inset && !inpolicy) other = 1
-    if (inset && managed != "") { print; print managed; done = 1; next }
+    if (inset && manage) { print; print managed; done = 1; next }
 }
-# The managed keys replace whatever values the table had for them.
-inset && managed != "" && /^[ \t]*"?(GIT_CONFIG_GLOBAL|GH_CONFIG_DIR)"?[ \t]*=/ { next }
-# set as an inline table or dotted keys: valid TOML this script does not edit.
-inpolicy && /^[ \t]*"?set"?[ \t]*[.=]/ { other = 1 }
-/^[ \t]*"?shell_environment_policy"?[ \t]*\./ { other = 1 }
+inset && /^[ \t]*["\047]?(GIT_CONFIG_GLOBAL|GH_CONFIG_DIR)["\047]?[ \t]*=/ {
+    # A multi-line value is not something this edits.
+    if ($0 ~ /("""|\047\047\047)/) other = 1
+    # Managed: the table gets these keys with this value, whatever it had.
+    if (manage) next
+    # Not managed: drop them where they still hold the value set here.
+    if (index($0, "\"" gitconfig "\"") || index($0, "\047" gitconfig "\047") ||
+        index($0, "\"" ghconfig "\"") || index($0, "\047" ghconfig "\047")) next
+}
+# set as an inline table or dotted keys, at the root or in the policy table.
+inpolicy && /^[ \t]*["\047]?set["\047]?[ \t]*[.=]/ { other = 1 }
+/^[ \t]*["\047]?shell_environment_policy["\047]?[ \t]*[.=]/ { other = 1 }
 !skip { print }
 END {
-    if (managed == "" || done) exit
+    if (!manage) exit
     if (other) {
-        print "codex config: shell_environment_policy.set is in a form this script does not edit; GIT_CONFIG_GLOBAL and GH_CONFIG_DIR not set" > "/dev/stderr"
-        exit
+        print "codex config: shell_environment_policy.set is in a form this script does not edit;" > "/dev/stderr"
+        print "  make it a plain [shell_environment_policy.set] table with one-line values, then apply again" > "/dev/stderr"
+        exit 1
     }
-    printf "\n[shell_environment_policy.set]\n%s\n", managed
+    if (!done) printf "\n[shell_environment_policy.set]\n%s\n", managed
 }
-'
+' &&
 cat <<'TOML'
 [mcp_servers.cloudflare]
 url = "https://mcp.cloudflare.com/mcp"
@@ -52,3 +65,18 @@ url = "https://builds.mcp.cloudflare.com/mcp"
 [mcp_servers.cloudflare-observability]
 url = "https://observability.mcp.cloudflare.com/mcp"
 TOML
+)
+{{- if .is_server }}
+# Never install a config Codex can't load: if the result doesn't parse, apply
+# fails and leaves the live file as it is. sync.sh's ssh shell may not have
+# uv on PATH.
+uv=$(command -v uv || echo "$HOME/.local/bin/uv")
+printf '%s\n' "$out" | "$uv" run --no-project python -I -c '
+import sys, tomllib
+try:
+    tomllib.loads(sys.stdin.read())
+except tomllib.TOMLDecodeError as e:
+    sys.exit(f"codex config: the result would not be valid TOML ({e}); not applied")
+'
+{{- end }}
+printf '%s\n' "$out"
