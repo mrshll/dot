@@ -7,21 +7,43 @@ set -eu
 # pushes over HTTPS with that login (dot_config/git/agent.gitconfig.tmpl).
 # Marsh's own shells keep ~/.config/gh and ~/.gitconfig. Only these two keys of
 # a plain [shell_environment_policy.set] table are managed. Everywhere else,
-# and to roll back (make the condition false), they are removed where they
-# still hold exactly these values: nothing but this script puts them there.
+# and to roll back (set $manage to false), they are removed where they still
+# hold exactly these values: nothing but this script puts them there.
+{{- $manage := .is_server }}
 gitconfig={{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}
 ghconfig={{ joinPath .chezmoi.homeDir ".config/gh-agent" | quote }}
-{{ if .is_server -}}
+{{ if $manage -}}
 manage=1
 {{- else -}}
 manage=
 {{- end }}
 live=$(cat)
 out=$(printf '%s' "$live" | awk -v manage="$manage" -v gitconfig="$gitconfig" -v ghconfig="$ghconfig" '
-function count(s, d,   n, i) {
-    n = 0
-    while ((i = index(s, d)) > 0) { n++; s = substr(s, i + length(d)) }
-    return n
+# scan(LINE): follow TOML strings and comments through LINE, so instr says
+# whether a multi-line string is still open at its end.
+function scan(s,   i, n, c) {
+    n = length(s); i = 1
+    while (i <= n) {
+        c = substr(s, i, 1)
+        if (instr == "\"\"\"") {
+            if (c == "\\") i += 2
+            else if (substr(s, i, 3) == "\"\"\"") { instr = ""; i += 3 }
+            else i++
+        } else if (instr == "\047\047\047") {
+            if (substr(s, i, 3) == "\047\047\047") { instr = ""; i += 3 }
+            else i++
+        } else if (c == "#") {
+            return
+        } else if (substr(s, i, 3) == "\"\"\"" || substr(s, i, 3) == "\047\047\047") {
+            instr = substr(s, i, 3); i += 3
+        } else if (c == "\"") {
+            for (i++; i <= n && substr(s, i, 1) != "\""; i++) if (substr(s, i, 1) == "\\") i++
+            i++
+        } else if (c == "\047") {
+            for (i++; i <= n && substr(s, i, 1) != "\047"; i++) ;
+            i++
+        } else i++
+    }
 }
 # holds(KEY, PATH): this line sets KEY to exactly PATH, quoted, then at most a comment.
 function holds(key, path,   rest, q, n) {
@@ -36,16 +58,9 @@ function holds(key, path,   rest, q, n) {
 }
 BEGIN { if (manage) managed = "GIT_CONFIG_GLOBAL = \"" gitconfig "\"\nGH_CONFIG_DIR = \"" ghconfig "\"" }
 # Inside a multi-line string: copy it as it is, whatever it looks like.
-instr != "" {
-    if (count($0, instr) % 2) instr = ""
-    if (!skip) print
-    next
-}
-{
-    opening = ""
-    if (count($0, "\"\"\"") % 2) opening = "\"\"\""
-    else if (count($0, "\047\047\047") % 2) opening = "\047\047\047"
-}
+instr != "" { scan($0); if (!skip) print; next }
+# opening: the multi-line string this line leaves open, if any.
+{ scan($0); opening = instr }
 /^[ \t]*\[/ {
     skip = ($0 ~ /^\[mcp_servers\.(cloudflare|cloudflare-docs|cloudflare-bindings|cloudflare-builds|cloudflare-observability)(\]|\.)/)
     inset = ($0 ~ /^[ \t]*\[[ \t]*shell_environment_policy[ \t]*\.[ \t]*set[ \t]*\][ \t]*(#.*)?$/)
@@ -66,7 +81,6 @@ inset && /^[ \t]*["\047]?(GIT_CONFIG_GLOBAL|GH_CONFIG_DIR)["\047]?[ \t]*=/ {
 inpolicy && /^[ \t]*["\047]?set["\047]?[ \t]*[.=]/ { other = 1 }
 /^[ \t]*["\047]?shell_environment_policy["\047]?[ \t]*[.=]/ { other = 1 }
 !skip { print }
-{ instr = opening }
 END {
     if (!manage) exit
     if (other) {
@@ -94,19 +108,21 @@ url = "https://builds.mcp.cloudflare.com/mcp"
 url = "https://observability.mcp.cloudflare.com/mcp"
 TOML
 )
-{{- if .is_server }}
-# Never install a config Codex can't load or that lacks the agent environment:
-# the result must parse, hold both managed values, and otherwise equal the
-# live config (Cloudflare entries aside), or apply fails and leaves the live
-# file as it is. sync.sh's ssh shell may not have uv on PATH.
+# Never install a config Codex can't load or with the wrong agent environment:
+# the result must parse, hold both managed values when managing and neither
+# agent value otherwise, and equal the live config in everything else
+# (Cloudflare entries aside), or apply fails and leaves the live file as it
+# is. sync.sh's ssh shell may not have uv on PATH. Without uv the check is
+# required only where the agent environment is managed.
+uv=$(command -v uv || { for u in "$HOME/.local/bin/uv" /opt/homebrew/bin/uv; do [ -x "$u" ] && echo "$u" && break; done; } || true)
+if [ -n "$uv" ]; then
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 printf '%s' "$live" > "$tmp/live.toml"
 printf '%s\n' "$out" > "$tmp/out.toml"
-uv=$(command -v uv || echo "$HOME/.local/bin/uv")
 "$uv" run --no-project python -I -c '
 import sys, tomllib
-live_path, out_path, gitconfig, ghconfig = sys.argv[1:]
+live_path, out_path, gitconfig, ghconfig, manage = sys.argv[1:]
 managed = {"GIT_CONFIG_GLOBAL": gitconfig, "GH_CONFIG_DIR": ghconfig}
 cloudflare = {"cloudflare", "cloudflare-docs", "cloudflare-bindings", "cloudflare-builds", "cloudflare-observability"}
 
@@ -135,10 +151,17 @@ def unmanaged(config):
 
 live, out = load(live_path, "the live config"), load(out_path, "the result")
 env = out.get("shell_environment_policy", {}).get("set", {})
-if any(env.get(k) != v for k, v in managed.items()):
+if manage and any(env.get(k) != v for k, v in managed.items()):
     sys.exit("codex config: the result lacks the agent environment; not applied")
+if not manage and any(env.get(k) == v for k, v in managed.items()):
+    sys.exit("codex config: the result still holds the agent environment; not applied")
 if unmanaged(live) != unmanaged(out):
     sys.exit("codex config: the result changes more than the managed keys; not applied")
-' "$tmp/live.toml" "$tmp/out.toml" "$gitconfig" "$ghconfig"
-{{- end }}
+' "$tmp/live.toml" "$tmp/out.toml" "$gitconfig" "$ghconfig" "$manage"
+elif [ -n "$manage" ]; then
+    echo "codex config: uv not found to check the result; not applied" >&2
+    exit 1
+else
+    echo "codex config: uv not found; result not checked" >&2
+fi
 printf '%s\n' "$out"

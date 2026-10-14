@@ -101,13 +101,14 @@ enforced='{
 # the agents' config (agent-gh --seed), and git authors and signs with its key
 # and pushes over HTTPS with that login (dot_config/git/agent.gitconfig.tmpl).
 # Marsh's own shells keep ~/.config/gh and ~/.gitconfig. Everywhere else, and
-# to roll back (make the condition false), the two keys are removed where they
+# to roll back (set $manage to false), the two keys are removed where they
 # still hold these values: nothing but this script puts them there.
+{{- $manage := .is_server }}
 agent_env='{
   "GIT_CONFIG_GLOBAL": {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }},
   "GH_CONFIG_DIR": {{ joinPath .chezmoi.homeDir ".config/gh-agent" | quote }}
 }'
-{{ if .is_server -}}
+{{ if $manage -}}
 env_enforced=$agent_env
 {{- else -}}
 env_enforced='{}'

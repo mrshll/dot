@@ -29,6 +29,15 @@ render() {
     chezmoi execute-template --file "$REPO_DIR/$1" --source "$REPO_DIR" --config "$cfg" \
         --override-data '{"chezmoi":{"os":"linux"}}'
 }
+# render_rollback TEMPLATE: TEMPLATE on serveserve with the documented rollback
+# edit ($manage set to false).
+render_rollback() {
+    sed 's/{{- $manage := .is_server }}/{{- $manage := false }}/' "$REPO_DIR/$1" > "$WORK/rollback.tmpl"
+    grep -q 'manage := false' "$WORK/rollback.tmpl" || { echo "no \$manage toggle in $1" >&2; return 1; }
+    printf '[data]\n  hostname = "test"\n  os = "linux"\n  is_server = true\n  has_op = false\n' > "$WORK/chezmoi-rb.toml"
+    chezmoi execute-template --file "$WORK/rollback.tmpl" --source "$REPO_DIR" --config "$WORK/chezmoi-rb.toml" \
+        --override-data '{"chezmoi":{"os":"linux"}}'
+}
 toml() { uv run --no-project python -I -c 'import json, sys, tomllib; print(json.dumps(tomllib.load(sys.stdin.buffer)))'; }
 
 # --- Claude Code settings ----------------------------------------------------
@@ -49,7 +58,10 @@ check "claude, elsewhere: no agent gitconfig, env untouched" '[ "$(jq -c .env <<
 out=$(bash "$WORK/claude-false.sh" <<<'{"theme":"dark"}')
 check "claude, elsewhere: no env added" '[ "$(jq -c . <<<"$out" | jq "has(\"env\")")" = false ]'
 out=$(bash "$WORK/claude-true.sh" <<<"$live" | bash "$WORK/claude-false.sh")
-check "claude, rolled back: the agent values are removed, env set by hand stays" '[ "$(jq -c .env <<<"$out")" = "{\"KEPT\":\"1\"}" ]'
+check "claude, elsewhere: the agent values are removed, env set by hand stays" '[ "$(jq -c .env <<<"$out")" = "{\"KEPT\":\"1\"}" ]'
+render_rollback dot_claude/modify_settings.json.tmpl > "$WORK/claude-rollback.sh"
+out=$(bash "$WORK/claude-true.sh" <<<"$live" | bash "$WORK/claude-rollback.sh")
+check "claude, serveserve rolled back: the agent values are removed, env set by hand stays" '[ "$(jq -c .env <<<"$out")" = "{\"KEPT\":\"1\"}" ]'
 out=$(bash "$WORK/claude-false.sh" <<<'{"env":{"GH_CONFIG_DIR":"/mine"}}')
 check "claude, elsewhere: a GH_CONFIG_DIR set by hand stays" '[ "$(jq -r .env.GH_CONFIG_DIR <<<"$out")" = /mine ]'
 
@@ -65,6 +77,20 @@ printf 'model = "kept"\n' > "$WORK/live/none.toml"
 # A table header inside a multi-line string is text, not a table.
 printf 'developer_instructions = """\nExample configuration:\n[shell_environment_policy.set]\nEXAMPLE = "sample"\n"""\nmodel = "kept"\n' > "$WORK/live/in-string.toml"
 printf "notes = '''\n[shell_environment_policy.set]\n'''\n\n[shell_environment_policy.set]\nKEPT = 'yes'\n" > "$WORK/live/in-literal-string.toml"
+# Triple quotes in a comment or a one-line string open nothing.
+cat > "$WORK/live/quotes-in-comment.toml" <<'TOML'
+# Use """ for multi-line instructions
+[mcp_servers.cloudflare]
+url = "https://mcp.cloudflare.com/mcp"
+[mcp_servers.other]
+url = "https://example.com"
+TOML
+cat > "$WORK/live/quotes-in-string.toml" <<'TOML'
+developer_instructions = 'Use """ for multi-line strings'
+note = "say \"\"\" here"
+[mcp_servers.cloudflare]
+url = 'https://mcp.cloudflare.com/mcp'
+TOML
 # Forms the script does not edit: on serveserve, apply must fail rather than
 # install a broken config or one without the agent identity.
 printf 'model = "kept"\n\n[shell_environment_policy]\ninherit = "core"\nset = { KEPT = "yes" }\n' > "$WORK/live/inline.toml"
@@ -109,9 +135,12 @@ check "codex, serveserve: a result that does not parse fails the apply" \
     '[ "$rc" -ne 0 ] && grep -q "not valid TOML" "$WORK/err-broken"'
 # Rolling back (or any other machine): the keys this set are removed; the same
 # keys holding something else, and everything else, stay.
-sh "$WORK/codex-true.sh" < "$WORK/live/table.toml" | sh "$WORK/codex-false.sh" > "$WORK/rolled.toml"
-check "codex, rolled back: the agent values are removed, everything else stays" \
-    '[ "$(json "$WORK/rolled.toml")" = "$(json "$WORK/live/table.toml" | jq -cS "del(.shell_environment_policy.set.GIT_CONFIG_GLOBAL, .shell_environment_policy.set.GH_CONFIG_DIR)")" ]'
+render_rollback dot_codex/modify_private_config.toml.tmpl > "$WORK/codex-rollback.sh"
+for undo in false rollback; do
+    sh "$WORK/codex-true.sh" < "$WORK/live/table.toml" | sh "$WORK/codex-$undo.sh" > "$WORK/rolled.toml" 2>"$WORK/err-rolled" && rc=0 || rc=$?
+    check "codex, rolled back ($undo): the agent values are removed, everything else stays" \
+        '[ "$rc" -eq 0 ] && [ "$(json "$WORK/rolled.toml")" = "$(json "$WORK/live/table.toml" | jq -cS "del(.shell_environment_policy.set.GIT_CONFIG_GLOBAL, .shell_environment_policy.set.GH_CONFIG_DIR)")" ]'
+done
 printf '[shell_environment_policy.set]\nGH_CONFIG_DIR = "/mine"\n' | sh "$WORK/codex-false.sh" > "$WORK/mine.toml"
 check "codex, elsewhere: a GH_CONFIG_DIR set by hand stays" '[ "$(json "$WORK/mine.toml" | jq -r .shell_environment_policy.set.GH_CONFIG_DIR)" = /mine ]'
 printf '[shell_environment_policy.set]\nGH_CONFIG_DIR = "/mine" # was "%s"\nGIT_CONFIG_GLOBAL = "%s"\n' "$AGENT_GH" "$AGENT_GH" | sh "$WORK/codex-false.sh" > "$WORK/mine.toml"
