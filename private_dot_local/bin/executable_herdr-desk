@@ -52,8 +52,7 @@ if printf '%s\n' "$existing" | awk -F '|' -v toad="$toad" '
 fi
 
 herdr=$(launch 'herdr: sessions' --session "$HOME/.config/kitty/herdr-desk.session" \
-    -o tab_bar_edge=top -o tab_bar_style=separator -o tab_bar_min_tabs=1 \
-    -o 'tab_separator=   │   ' -o 'tab_title_template= {title} ')
+    -o tab_bar_min_tabs=1)
 [ -n "$toad" ] || toad=$(launch 'toad' /opt/homebrew/bin/fish -lc 'toad; exec fish')
 aerospace list-windows --all --format '%{window-id}|%{app-pid}|%{app-bundle-id}' |
     awk -F '|' -v id="$toad" '$1 == id' > "$toad_state"
