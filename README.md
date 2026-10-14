@@ -49,6 +49,24 @@ to herdr. **Alt+6** returns to this workspace. Run the launcher again after
 changing monitors to restore the proportions. Closing Kitty detaches the
 herdr clients; remote agents keep running.
 
+## Deskflow (Mac → marshbox)
+
+The keyboard and mouse plugged into the Mac also drive marshbox, on its own
+display: [Deskflow](https://github.com/deskflow/deskflow) with the Mac as
+server and marshbox as client, TLS on and both fingerprints trusted. marshbox
+sits to the right of the Mac (`Library/Deskflow/deskflow-server.conf`).
+
+The Deskflow app owns each side and starts its own core: a LaunchAgent opens
+it at login on the Mac, an XDG autostart entry on marshbox (Flatpak, since
+Ubuntu 24.04 has no package). `modify_Deskflow.conf` owns only the role, name
+and TLS keys, and the app keeps everything else. marshbox's server address
+comes from `remote-host`, an uncommitted one-line file beside its
+Deskflow.conf, so the Mac's name stays out of this repo. Quit Deskflow before
+applying, or the running app may write its own values back.
+
+marshbox runs the client only inside a graphical session, so its login screen
+gets no input from the Mac.
+
 ## What's managed
 
 | Target | Source | Notes |

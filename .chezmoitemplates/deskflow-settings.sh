@@ -3,9 +3,10 @@
 # file itself (computer name, last version, anything changed in its settings
 # dialog), so only these keys are owned here. Quit Deskflow before applying:
 # a running GUI may write its own values back over these.
-awk -v settings="$settings" '
+# Passed through the environment: BSD awk (the Mac's) rejects a newline in -v.
+DESKFLOW_SETTINGS=$settings awk '
 BEGIN {
-    n = split(settings, lines, "\n")
+    n = split(ENVIRON["DESKFLOW_SETTINGS"], lines, "\n")
     for (i = 1; i <= n; i++) {
         if (lines[i] == "") continue
         slash = index(lines[i], "/"); eq = index(lines[i], "=")

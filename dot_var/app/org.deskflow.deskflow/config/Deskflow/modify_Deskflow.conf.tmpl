@@ -1,11 +1,18 @@
 #!/bin/sh
 # Deskflow on marshbox: a client of the Mac. This is the Flatpak's config
-# directory. The server address (client/remoteHost) is set once in the
-# Deskflow GUI and left alone here, so the Mac's name stays out of this repo.
+# directory. The server address comes from remote-host beside this file, a
+# one-line file written by hand and never committed, so the Mac's name stays
+# out of this repo; without it, client/remoteHost is left as it is.
 set -eu
 settings='core/coreMode=1
 core/computerName=marshbox
 gui/startCoreWithGui=true
 security/tlsEnabled=true
 security/checkPeerFingerprints=true'
+host_file="{{ .chezmoi.homeDir }}/.var/app/org.deskflow.deskflow/config/Deskflow/remote-host"
+if [ -r "$host_file" ]; then
+    host=$(head -n 1 "$host_file" | tr -d '[:space:]')
+    [ -z "$host" ] || settings="$settings
+client/remoteHost=$host"
+fi
 {{ template "deskflow-settings.sh" . }}
