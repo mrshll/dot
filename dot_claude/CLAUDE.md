@@ -88,6 +88,10 @@ checkout sets itself. My own login (mrshll) is in
 me with it, and never store a login (`gh auth login`, a token file, an SSH
 key) — tell me instead.
 
+## Public content
+
+Avoid putting potentially sensitive or compromising content (including internal discussions, customer names, PII, etc.) in public issues and PRs, or anywhere else public: comments, reviews, commit messages, branch names, code, docs and test fixtures. Refer to customers generically ("an Enterprise customer") and use obviously fake data in tests. This dotfiles repo is public too; when unsure, check with `gh repo view <owner/repo> --json visibility`.
+
 ## Infrastructure
 
 - Server: serveserve.local (100.72.11.128 via Tailscale), Ubuntu
