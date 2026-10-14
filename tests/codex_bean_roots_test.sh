@@ -44,12 +44,13 @@ render true manage > "$WORK/no-identity.sh"
 render true manage bean > "$WORK/rolled-back.sh"
 
 # json FILE: the TOML as JSON, leaving out what the modifier manages besides
-# Bean's roots (Cloudflare MCP entries and the agent environment). An empty
+# Bean's roots (Cloudflare MCP entries, the agent environment and
+# network_access, which tests/codex_network_test.sh covers). An empty
 # writable_roots, and then an empty table, count as none: removing Bean's
 # paths from a list that held only them leaves "writable_roots = []".
 json() {
     uv run --no-project python -I -c 'import json, sys, tomllib; print(json.dumps(tomllib.load(sys.stdin.buffer)))' < "$1" |
-        jq -cS 'del(.mcp_servers, .shell_environment_policy)
+        jq -cS 'del(.mcp_servers, .shell_environment_policy, .sandbox_workspace_write.network_access)
             | if .sandbox_workspace_write.writable_roots == [] then del(.sandbox_workspace_write.writable_roots) else . end
             | if .sandbox_workspace_write == {} then del(.sandbox_workspace_write) else . end'
 }

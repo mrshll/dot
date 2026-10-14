@@ -1,7 +1,7 @@
 #!/bin/sh
 # Preserve Codex-managed local state; manage only Cloudflare MCP entries and,
-# on serveserve, the GitHub identity of the commands Codex runs and Bean's
-# writable roots.
+# on serveserve, the GitHub identity of the commands Codex runs, Bean's
+# writable roots and the sandbox's network access.
 set -eu
 # serveserve: Codex's commands run gh and git as mrshll-agent: gh reads the
 # agents' config (agent-gh --seed), and git authors and signs with its key and
@@ -18,8 +18,18 @@ set -eu
 # arrays layer by layer, so it would drop the roots in this list. To roll back
 # (set $bean to false), both paths are removed from the list, whoever put them
 # there. Other machines' lists are left as they are.
+#
+# serveserve: Codex's workspace-write sandbox also has network access, so
+# bean refresh can reach Garmin. sandbox_workspace_write.network_access is set
+# to true where it is, and added at the end of the table (or the top-level
+# dotted keys) where it is not. This opens the network to every workspace-write
+# session on serveserve; one started with
+# --config sandbox_workspace_write.network_access=... keeps its own value. To
+# roll back (set $net to false), the key is removed where it still holds true.
+# Other machines' values are left as they are.
 {{- $manage := .is_server }}
 {{- $bean := .is_server }}
+{{- $net := .is_server }}
 gitconfig={{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}
 ghconfig={{ joinPath .chezmoi.homeDir ".config/gh-agent" | quote }}
 beandata={{ joinPath .chezmoi.homeDir ".local/share/pond/bean" | quote }}
@@ -34,10 +44,15 @@ bean=1
 {{- else -}}
 bean=
 {{- end }}
+{{ if $net -}}
+net=1
+{{- else -}}
+net=
+{{- end }}
 server={{ if .is_server }}1{{ end }}
 live=$(cat)
 out=$(printf '%s' "$live" | awk -v manage="$manage" -v gitconfig="$gitconfig" -v ghconfig="$ghconfig" \
-    -v server="$server" -v bean="$bean" -v beandata="$beandata" -v beanconfig="$beanconfig" '
+    -v server="$server" -v bean="$bean" -v beandata="$beandata" -v beanconfig="$beanconfig" -v net="$net" '
 # scan(LINE): follow TOML strings and comments through LINE, so instr says
 # whether a multi-line string is still open at its end, and depth how many
 # arrays are.
@@ -135,19 +150,19 @@ function roots(   r, k, n, lines, list, data, config, changed) {
     instr = ""; depth = 0; n = split(coll, lines, "\n")
     for (k = 1; k <= n; k++) scan(lines[k])
 }
-# pending(): this table, or the top level holding sandbox_workspace_write
-# dotted keys, still lacks the writable_roots it gets when it ends.
-function pending() {
-    return bean && !rootsseen && !added && (section == "sw" || (section == "top" && swdotted))
-}
-# endsection(): give a pending section its writable_roots, before the blank
-# lines and comments that end it.
+# pendroots() / pendnet(): this table, or the top level holding
+# sandbox_workspace_write dotted keys, still lacks the writable_roots or the
+# network_access it gets when it ends. pending(): either.
+function insw() { return section == "sw" || (section == "top" && swdotted) }
+function pendroots() { return bean && !rootsseen && !added && insw() }
+function pendnet() { return net && !netseen && !netadded && insw() }
+function pending() { return pendroots() || pendnet() }
+# endsection(): give a pending section its writable_roots and network_access,
+# before the blank lines and comments that end it.
 function endsection(   key) {
-    if (pending()) {
-        key = section == "top" ? "sandbox_workspace_write.writable_roots" : "writable_roots"
-        print key " = " beanroots
-        added = 1
-    }
+    key = section == "top" ? "sandbox_workspace_write." : ""
+    if (pendroots()) { print key "writable_roots = " beanroots; added = 1 }
+    if (pendnet()) { print key "network_access = true"; netadded = 1 }
     printf "%s", held; held = ""
 }
 BEGIN {
@@ -182,7 +197,20 @@ pending() && /^[ \t\r]*(#.*)?$/ { held = held $0 "\n"; next }
 # dotted key at the top level (an inline table there is a form this does not edit).
 server && !inarray && (section == "sw" && /^[ \t]*["\047]?writable_roots["\047]?[ \t]*=/ ||
     section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\.[ \t]*["\047]?writable_roots["\047]?[ \t]*=/) {
+    if (section == "top") swdotted = 1
     coll = $0; roots(); next
+}
+# serveserve: network_access, in the same two places. It is set to true (net),
+# or removed where it holds true (not); any value but true or false is a form
+# this does not edit.
+server && !inarray && (section == "sw" && /^[ \t]*["\047]?network_access["\047]?[ \t]*=/ ||
+    section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\.[ \t]*["\047]?network_access["\047]?[ \t]*=/) {
+    if (section == "top") swdotted = 1
+    netseen = 1
+    if ($0 !~ /=[ \t]*(true|false)[ \t]*(#.*)?$/) { netfail = 1; print; next }
+    if (net) sub(/=[ \t]*false/, "= true")
+    else if ($0 ~ /=[ \t]*true[ \t]*(#.*)?$/) next
+    print; next
 }
 section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\./ { swdotted = 1 }
 section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*=/ { swother = 1 }
@@ -201,13 +229,25 @@ inpolicy && /^[ \t]*["\047]?set["\047]?[ \t]*[.=]/ { other = 1 }
 END {
     if (incoll) { swother = rootsseen = 1; print coll }
     endsection()
-    if (bean && !rootsseen && !added && !swtable && !swdotted && !swother) printf "\n[sandbox_workspace_write]\nwritable_roots = %s\n", beanroots
+    needroots = bean && !rootsseen && !added; neednet = net && !netseen && !netadded
+    if ((needroots || neednet) && !swtable && !swdotted && !swother) {
+        printf "\n[sandbox_workspace_write]\n"
+        if (needroots) printf "writable_roots = %s\n", beanroots
+        if (neednet) print "network_access = true"
+    }
     # Not editing it fails the apply where the Bean paths go in; where they come
     # out, the check below fails it if they are left in.
     if (swfail || bean && swother) {
         print "codex config: sandbox_workspace_write.writable_roots is in a form this script does not edit;" > "/dev/stderr"
         print "  make it an array of one-line strings without escapes or comments inside, in a plain" > "/dev/stderr"
         print "  [sandbox_workspace_write] table or as a top-level dotted key, then apply again" > "/dev/stderr"
+        exit 1
+    }
+    # The same for network_access, where it goes in or holds a value this does not edit.
+    if (netfail || net && swother) {
+        print "codex config: sandbox_workspace_write.network_access is in a form this script does not edit;" > "/dev/stderr"
+        print "  make it network_access = true or false in a plain [sandbox_workspace_write] table" > "/dev/stderr"
+        print "  or as a top-level dotted key, then apply again" > "/dev/stderr"
         exit 1
     }
     if (!manage) exit
@@ -236,14 +276,15 @@ url = "https://builds.mcp.cloudflare.com/mcp"
 url = "https://observability.mcp.cloudflare.com/mcp"
 TOML
 )
-# Never install a config Codex can't load or with the wrong agent environment
-# or writable roots: the result must parse, hold both managed values when
-# managing and neither agent value otherwise, hold the live writable_roots in
-# order with the Bean paths appended or removed, and equal the live config in
-# everything else (Cloudflare entries aside), or apply fails and leaves the live
-# file as it is. sync.sh's ssh shell may not have uv on PATH. Without uv the
-# check is required on serveserve, whichever toggles are rolled back, and
-# skipped elsewhere.
+# Never install a config Codex can't load or with the wrong agent environment,
+# writable roots or network access: the result must parse, hold both managed
+# values when managing and neither agent value otherwise, hold the live
+# writable_roots in order with the Bean paths appended or removed, hold
+# network_access true on serveserve (or, rolled back, anything but true) and as
+# it was elsewhere, and equal the live config in everything else (Cloudflare
+# entries aside), or apply fails and leaves the live file as it is. sync.sh's
+# ssh shell may not have uv on PATH. Without uv the check is required on
+# serveserve, whichever toggles are rolled back, and skipped elsewhere.
 uv=$(command -v uv || { for u in "$HOME/.local/bin/uv" /opt/homebrew/bin/uv; do [ -x "$u" ] && echo "$u" && break; done; } || true)
 if [ -n "$uv" ]; then
 tmp=$(mktemp -d)
@@ -252,7 +293,7 @@ printf '%s' "$live" > "$tmp/live.toml"
 printf '%s\n' "$out" > "$tmp/out.toml"
 "$uv" run --no-project python -I -c '
 import sys, tomllib
-live_path, out_path, gitconfig, ghconfig, manage, server, bean, *bean_roots = sys.argv[1:]
+live_path, out_path, gitconfig, ghconfig, manage, server, bean, net, *bean_roots = sys.argv[1:]
 managed = {"GIT_CONFIG_GLOBAL": gitconfig, "GH_CONFIG_DIR": ghconfig}
 cloudflare = {"cloudflare", "cloudflare-docs", "cloudflare-bindings", "cloudflare-builds", "cloudflare-observability"}
 
@@ -279,12 +320,16 @@ def unmanaged(config):
         config["mcp_servers"] = servers
     sandbox = dict(config.pop("sandbox_workspace_write", {}))
     sandbox.pop("writable_roots", None)
+    sandbox.pop("network_access", None)
     if sandbox:
         config["sandbox_workspace_write"] = sandbox
     return config
 
 def roots(config):
     return config.get("sandbox_workspace_write", {}).get("writable_roots", [])
+
+def network(config):
+    return config.get("sandbox_workspace_write", {}).get("network_access")
 
 live, out = load(live_path, "the live config"), load(out_path, "the result")
 env = out.get("shell_environment_policy", {}).get("set", {})
@@ -296,9 +341,16 @@ want = [r for r in roots(live) if bean or not server or r not in bean_roots]
 want += [r for r in bean_roots if bean and r not in want]
 if roots(out) != want:
     sys.exit("codex config: the result does not hold the expected writable_roots; not applied")
+want = network(live)
+if server and net:
+    want = True
+elif server and want is True:
+    want = None
+if network(out) != want or type(network(out)) is not type(want):
+    sys.exit("codex config: the result does not hold the expected network_access; not applied")
 if unmanaged(live) != unmanaged(out):
     sys.exit("codex config: the result changes more than the managed keys; not applied")
-' "$tmp/live.toml" "$tmp/out.toml" "$gitconfig" "$ghconfig" "$manage" "$server" "$bean" "$beandata" "$beanconfig"
+' "$tmp/live.toml" "$tmp/out.toml" "$gitconfig" "$ghconfig" "$manage" "$server" "$bean" "$net" "$beandata" "$beanconfig"
 elif [ -n "$server" ]; then
     echo "codex config: uv not found to check the result; not applied" >&2
     exit 1
