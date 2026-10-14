@@ -8,7 +8,7 @@ set -eu
 # Away from home the Mac doesn't hold it, so the server can't listen; without
 # a valid address it listens on loopback, never on every interface.
 settings="core/coreMode=2
-core/computerName=macbook
+core/computerName=marshtop
 core/interface=$(home_address "{{ .chezmoi.homeDir }}/Library/Deskflow/listen-address")
 gui/startCoreWithGui=true
 security/tlsEnabled=true

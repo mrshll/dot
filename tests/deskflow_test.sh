@@ -122,7 +122,7 @@ fi
 # the Mac, client/remoteHost on marshbox.
 MAC_FRESH="[core]
 coreMode=2
-computerName=macbook
+computerName=marshtop
 interface=@ADDR@
 
 [gui]
@@ -241,7 +241,7 @@ closeToTray=true
 [core]
 coreMode=2
 lastVersion=1.20.1
-computerName=macbook
+computerName=marshtop
 interface=@ADDR@
 
 [client]
@@ -262,11 +262,11 @@ lastVersion=1.20.1
 interface=10.9.9.9}"
 MAC_EXPECTED_IFACE="${MAC_EXPECTED/"coreMode=2
 lastVersion=1.20.1
-computerName=macbook
+computerName=marshtop
 interface=@ADDR@"/"coreMode=2
 interface=@ADDR@
 lastVersion=1.20.1
-computerName=macbook"}"
+computerName=marshtop"}"
 
 # resolve PATH: the executable PATH finally points at.
 resolve() {
@@ -423,7 +423,7 @@ fi
 
 layout="$REPO_DIR/Library/Deskflow/deskflow-server.conf"
 screens=$(awk '/^section: screens/{s=1;next} /^end/{s=0} s && /:[ \t]*$/{gsub(/[ \t:]/,""); print}' "$layout")
-for name in macbook marshbox; do
+for name in marshtop marshbox; do
     grep -qx "$name" <<< "$screens" && pass "layout: $name is a screen" || fail "layout: no screen $name"
 done
 for name in $(printf '%s%s' "$MAC_FRESH" "$BOX_FRESH" | sed -n 's/^computerName=//p'); do
