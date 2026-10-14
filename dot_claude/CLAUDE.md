@@ -88,6 +88,10 @@ checkout sets itself. My own login (mrshll) is in
 me with it, and never store a login (`gh auth login`, a token file, an SSH
 key) — tell me instead.
 
+## Customer names
+
+Customer records live in the private repo dynamical-org/meta, one file per customer at `customers/<slug>.yaml`, with the display name in `name:`. Keep every customer's name, slug, contact details and record path (`customers/<slug>.yaml`) out of anything public: issues, PRs, comments, reviews, commit messages, branch names, code, docs and test fixtures in a public repo. This dotfiles repo is public too; when unsure, check with `gh repo view <owner/repo> --json visibility`. Refer to customers generically ("an Enterprise customer", "a Startup customer"), and use obviously fake names in tests (`Example Co`).
+
 ## Infrastructure
 
 - Server: serveserve.local (100.72.11.128 via Tailscale), Ubuntu
