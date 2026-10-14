@@ -3,11 +3,20 @@
 #
 #   agent-gh <command> [args...]   e.g. agent-gh gh pr create, agent-gh git push
 #   agent-gh --setup               author and sign this checkout's commits as it
+#   agent-gh --seed                store its token in the agents' gh config (Marsh, once)
 #
-# The token comes from 1Password through passh into GH_TOKEN, which gh and its
-# git credential helper read. SSH GitHub remotes go over HTTPS for the command,
-# so a push can't use Marsh's SSH key. No token, no command: never Marsh's login.
+# The token is mrshll-agent's login in the agents' own gh config
+# (~/.config/gh-agent/hosts.yml, 0600), which agent sessions on serveserve get
+# as GH_CONFIG_DIR; Marsh's ~/.config/gh keeps his own login. It is looked up
+# by name there, so it never becomes whichever account is active. Until --seed
+# has stored it, it comes from 1Password through passh instead.
+# Either way it goes into GH_TOKEN, which gh and its git credential helper
+# read. SSH GitHub remotes go over HTTPS for the command, so a push can't use
+# Marsh's SSH key. No token, no command: never Marsh's login.
 set -euo pipefail
+
+AGENT_TOKEN_REF='op://Private/Github agent/Token'
+AGENT_GH_CONFIG_DIR=$HOME/.config/gh-agent
 
 if [ "${1-}" = --setup ]; then
     # Per worktree, so the main checkout and other worktrees keep their own.
@@ -19,12 +28,51 @@ if [ "${1-}" = --setup ]; then
     git config --worktree commit.gpgsign true
     exit
 fi
-[ $# -gt 0 ] || { printf 'usage: agent-gh <command> [args...] | agent-gh --setup\n' >&2; exit 64; }
+if [ "${1-}" = --seed ]; then
+    # One passh approval. The token is checked to be mrshll-agent's before gh
+    # stores it, travels under another name (gh refuses to log in while GH_TOKEN
+    # or GITHUB_TOKEN is set) and reaches gh on stdin. --insecure-storage: a
+    # plain 0600 file, never a keyring a headless box can't unlock.
+    # github.com, in the agents' config, whatever the shell inherited.
+    unset GH_TOKEN GITHUB_TOKEN GH_HOST
+    export GH_CONFIG_DIR=$AGENT_GH_CONFIG_DIR
+    mkdir -p "$GH_CONFIG_DIR" && chmod 700 "$GH_CONFIG_DIR"
+    PASSH_NO_FALLBACK=1 passh run \
+        --env-file=<(printf 'AGENT_GH_SEED=%s\n' "$AGENT_TOKEN_REF") \
+        -- env -u PASSH_NO_FALLBACK sh -c '
+            [ -n "${AGENT_GH_SEED-}" ] || { echo "agent-gh: empty token" >&2; exit 1; }
+            login=$(GH_TOKEN=$AGENT_GH_SEED gh api --hostname github.com user --jq .login) || exit 1
+            [ "$login" = mrshll-agent ] || {
+                printf "agent-gh: that token is %s, not mrshll-agent; nothing stored\n" "$login" >&2
+                exit 1
+            }
+            printf "%s\n" "$AGENT_GH_SEED" | env -u AGENT_GH_SEED gh auth login \
+                --hostname github.com --git-protocol https --insecure-storage --with-token'
+    gh auth token --hostname github.com --user mrshll-agent >/dev/null
+    printf 'agent-gh: %s is logged in as mrshll-agent\n' "$GH_CONFIG_DIR" >&2
+    exit
+fi
+[ $# -gt 0 ] || { printf 'usage: agent-gh <command> [args...] | agent-gh --setup | agent-gh --seed\n' >&2; exit 64; }
 
 unset GITHUB_TOKEN
-export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=2 \
+# Command-scope config outranks every config file: the empty helper drops any a
+# checkout sets for github.com, so git asks gh, which answers with GH_TOKEN. It
+# does not override credentials written into a remote URL or an
+# http.extraHeader; those are a checkout's own explicit choice.
+export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=4 \
     GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_0=git@github.com: \
-    GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=ssh://git@github.com/
+    GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=ssh://git@github.com/ \
+    GIT_CONFIG_KEY_2=credential.https://github.com.helper GIT_CONFIG_VALUE_2= \
+    GIT_CONFIG_KEY_3=credential.https://github.com.helper GIT_CONFIG_VALUE_3='!gh auth git-credential'
+# Where --seed stored it, whatever GH_CONFIG_DIR or GH_TOKEN was inherited;
+# the command gets that config too.
+export GH_CONFIG_DIR=$AGENT_GH_CONFIG_DIR
+if token=$(env -u GH_TOKEN gh auth token --hostname github.com --user mrshll-agent 2>/dev/null) &&
+    [ -n "$token" ]; then
+    GH_TOKEN=$token exec "$@"
+fi
 PASSH_NO_FALLBACK=1 exec passh run \
-    --env-file=<(printf '%s\n' 'GH_TOKEN=op://Private/Github agent/Token') \
-    -- env -u PASSH_NO_FALLBACK "$@"
+    --env-file=<(printf 'GH_TOKEN=%s\n' "$AGENT_TOKEN_REF") \
+    -- env -u PASSH_NO_FALLBACK bash -c '
+        [ -n "${GH_TOKEN-}" ] || { echo "agent-gh: no token from 1Password" >&2; exit 1; }
+        exec "$@"' agent-gh "$@"

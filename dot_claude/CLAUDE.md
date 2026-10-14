@@ -74,6 +74,20 @@ in`, tell me to run `eval $(op signin)` — never try to supply that password
 yourself. Don't route around any of this with a service-account token.
 `passh doctor` diagnoses the link.
 
+GitHub on serveserve: your commands run with
+`GH_CONFIG_DIR=~/.config/gh-agent` and
+`GIT_CONFIG_GLOBAL=~/.config/git/agent.gitconfig`, so plain `gh`, `git push`
+(SSH remotes go over HTTPS) and your commits act, author and sign as my machine
+account, mrshll-agent, with no passh. Leave both variables alone. A
+GH_TOKEN or GITHUB_TOKEN in your environment, or a checkout's own credential
+helper, outranks that login: then use `agent-gh` (`agent-gh gh pr create`,
+`agent-gh git push`), which pins mrshll-agent over both and works everywhere.
+`agent-gh --setup` pins the commit identity per checkout, over any the
+checkout sets itself. My own login (mrshll) is in
+`~/.config/gh` for my shells: never point gh or git at it, read it, or act as
+me with it, and never store a login (`gh auth login`, a token file, an SSH
+key) — tell me instead.
+
 ## Infrastructure
 
 - Server: serveserve.local (100.72.11.128 via Tailscale), Ubuntu

@@ -1,9 +1,12 @@
 # Git config for agents acting as Marsh's GitHub machine account,
-# mrshll-agent. Not read by default: ~/.local/bin/as-agent points
-# GIT_CONFIG_GLOBAL here for the commands it runs. It stands alone rather than
-# including ~/.gitconfig, so nothing added there later (a credential, a URL
-# rewrite, an identity) can act as Marsh from an agent's shell. Herdr Meta's
-# seat check trusts this file and flags those settings anywhere else.
+# mrshll-agent. Not read by default: on serveserve, Claude Code and Codex put
+# GIT_CONFIG_GLOBAL=<this file> in the environment of every command they run
+# (dot_claude/modify_settings.json.tmpl, dot_codex/modify_private_config.toml.tmpl),
+# so an agent's commits author and sign as mrshll-agent while Marsh's own shells
+# keep ~/.gitconfig. It stands alone rather than including ~/.gitconfig, so
+# nothing added there later (a credential, a URL rewrite, an identity) can act
+# as Marsh from an agent's shell. Herdr Meta's seat check trusts this file and
+# flags those settings anywhere else.
 {{- $gh := ternary "/opt/homebrew/bin/gh" "/usr/bin/gh" (eq .chezmoi.os "darwin") }}
 [user]
 	name = mrshll-agent
@@ -24,7 +27,8 @@
 	smudge = git-lfs smudge -- %f
 	process = git-lfs filter-process
 	required = true
-{{/* gh hands git the agent's GH_TOKEN, since as-agent gives gh no stored login. */ -}}
+{{/* gh hands git the agents' login, mrshll-agent: agent sessions on serveserve
+     also get GH_CONFIG_DIR=~/.config/gh-agent (agent-gh --seed). */ -}}
 [credential "https://github.com"]
 	helper =
 	helper = !{{ $gh }} auth git-credential
@@ -32,7 +36,8 @@
 	helper =
 	helper = !{{ $gh }} auth git-credential
 {{/* An SSH remote would push with Marsh's own key, as mrshll. Over HTTPS the
-     credential helper hands git the agent's GH_TOKEN instead. */ -}}
+     credential helper hands git the agent's login instead. Only agents get
+     this rewrite; Marsh's ~/.gitconfig keeps SSH remotes. */ -}}
 [url "https://github.com/"]
 	insteadOf = git@github.com:
 	insteadOf = ssh://git@github.com/
