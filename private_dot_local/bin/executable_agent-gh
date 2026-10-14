@@ -52,7 +52,7 @@ unset GITHUB_TOKEN
 export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=2 \
     GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_0=git@github.com: \
     GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=ssh://git@github.com/
-# An inherited GH_TOKEN (say, Marsh's from mgh) would answer the lookup instead.
+# An inherited GH_TOKEN would answer the lookup instead.
 if token=$(env -u GH_TOKEN gh auth token --hostname github.com --user mrshll-agent 2>/dev/null) &&
     [ -n "$token" ]; then
     GH_TOKEN=$token exec "$@"

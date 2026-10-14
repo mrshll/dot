@@ -74,15 +74,14 @@ in`, tell me to run `eval $(op signin)` — never try to supply that password
 yourself. Don't route around any of this with a service-account token.
 `passh doctor` diagnoses the link.
 
-GitHub on serveserve: the stored login is my machine account, mrshll-agent,
-so plain `gh` and HTTPS git act as it with no passh. Run `gh` and `git push`
-through `agent-gh` anyway (`agent-gh gh pr create`, `agent-gh git push`): it
-pins mrshll-agent even if another account is active and sends SSH remotes over
-HTTPS, so my SSH key never pushes. `agent-gh --setup` makes a checkout author
-and sign commits as it. Acting as me (mrshll) takes `mgh` (`mgh pr merge 12`,
-`mgh git push`), which injects my token through passh — my approval at the
-Mac. Use it only when I ask, and never `gh auth login` or `gh auth switch` to
-me.
+GitHub on serveserve: the only login is my machine account, mrshll-agent,
+stored in gh's config, so plain `gh` and git (SSH remotes are rewritten to
+HTTPS) act as it with no passh. Run `gh` and `git push` through `agent-gh`
+anyway (`agent-gh gh pr create`, `agent-gh git push`): it pins mrshll-agent
+whatever else is in the environment. `agent-gh --setup` makes a checkout author
+and sign commits as it. My own GitHub login (mrshll) is deliberately absent
+from serveserve: anything that must be done as me happens on my laptop. Never
+add it back (`gh auth login`, a token, an SSH key) — tell me instead.
 
 ## Infrastructure
 

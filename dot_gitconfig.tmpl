@@ -42,3 +42,11 @@
 [credential "https://gist.github.com"]
 	helper =
 	helper = !{{ $gh }} auth git-credential
+{{- if .is_server }}
+{{/* serveserve holds no GitHub login of Marsh's: neither gh nor his SSH key
+     authenticates as mrshll there. SSH remotes go over HTTPS instead, where
+     public repos read anonymously and gh's stored login, mrshll-agent, pushes. */ -}}
+[url "https://github.com/"]
+	insteadOf = git@github.com:
+	insteadOf = ssh://git@github.com/
+{{- end }}

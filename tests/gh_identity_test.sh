@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Regression test for the GitHub identity wrappers in private_dot_local/bin.
+# Regression test for agent-gh in private_dot_local/bin.
 #
 # mrshll-agent is the ambient identity on serveserve: agent-gh uses its token
 # from gh's own store without passh, and falls back to passh only when that
-# token is missing. Acting as Marsh (mgh) always goes through passh. Neither
-# ever hands a command Marsh's stored login.
+# token is missing. It never hands a command another account's login.
 #
-# Runs the scripts against stub gh and passh in a throwaway HOME; no network,
+# Runs the script against stub gh and passh in a throwaway HOME; no network,
 # no 1Password, nothing touches the real gh config.
 #
 # Usage: tests/gh_identity_test.sh
@@ -14,7 +13,6 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 AGENT_GH="$REPO_DIR/private_dot_local/bin/executable_agent-gh"
-MGH="$REPO_DIR/private_dot_local/bin/executable_mgh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -79,7 +77,7 @@ check "agent-gh: SSH remotes go over HTTPS" 'grep -qx "git@github.com:" <<<"$out
 check "agent-gh: looks the token up by user, never the active account" \
     'grep -q "^auth token --hostname github.com --user mrshll-agent|" "$WORK/gh.log" && ! grep -q "marsh" <<<"$out"'
 
-out=$(run env GH_TOKEN=marsh-from-mgh GITHUB_TOKEN=marsh-too bash "$AGENT_GH" probe)
+out=$(run env GH_TOKEN=marsh-inherited GITHUB_TOKEN=marsh-too bash "$AGENT_GH" probe)
 check "agent-gh: an inherited GH_TOKEN is neither used nor passed on" \
     'grep -qx "GH_TOKEN=agent-stored-token" <<<"$out" && grep -q "|GH_TOKEN=$" "$WORK/gh.log"'
 check "agent-gh: an inherited GITHUB_TOKEN is dropped" 'grep -qx "GITHUB_TOKEN=" <<<"$out"'
@@ -109,24 +107,6 @@ run bash "$AGENT_GH" --seed >/dev/null 2>&1 && seeded=0 || seeded=$?
 check "agent-gh --seed: refuses a token that is not mrshll-agent's, storing nothing" \
     '[ "$seeded" -ne 0 ] && ! grep -q "^auth login" "$WORK/gh.log"'
 rm -f "$WORK/login-as"
-
-# --- mgh ---------------------------------------------------------------------
-touch "$WORK/stored"
-out=$(run bash "$MGH" pr list)
-check "mgh: gh as Marsh, token from passh, never the agent's" \
-    'grep -q "^GH_TOKEN=op://" "$WORK/passh.log" && ! grep -q "Github agent" "$WORK/passh.log" && grep -q "^gh-ran pr list GH_TOKEN=resolved:op://" <<<"$out"'
-out=$(run env GH_TOKEN=agent-stored-token bash "$MGH" git config --get-all url.https://github.com/.insteadOf)
-check "mgh git: token from passh" 'grep -q "^GH_TOKEN=op://" "$WORK/passh.log"'
-check "mgh git: SSH remotes go over HTTPS, so git uses the injected token" 'grep -qx "git@github.com:" <<<"$out"'
-# A passh that resolves the item to nothing.
-mkdir -p "$WORK/emptybin"
-printf '#!/usr/bin/env bash\nshift 3; GH_TOKEN= exec "$@"\n' > "$WORK/emptybin/passh"
-chmod +x "$WORK/emptybin/passh"
-out=$(run env PATH="$WORK/emptybin:$WORK/bin:/usr/bin:/bin" bash "$MGH" pr list 2>/dev/null) && rc=0 || rc=$?
-check "mgh: an empty token fails rather than falling back to the stored agent login" \
-    '[ "$rc" -ne 0 ] && ! grep -q "^gh-ran" <<<"$out"'
-run bash "$MGH" >/dev/null 2>&1 && rc=0 || rc=$?
-check "mgh: no arguments is a usage error" '[ "$rc" -eq 64 ] && [ ! -e "$WORK/passh.log" ]'
 
 echo
 [ "$failures" -eq 0 ] && echo "all passed" || { echo "$failures failure(s)" >&2; exit 1; }
