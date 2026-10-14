@@ -26,7 +26,7 @@ set -eu
 # session on serveserve; one started with
 # --config sandbox_workspace_write.network_access=... keeps its own value. To
 # roll back (set $net to false), the key is removed where it still holds true;
-# in a form this does not edit (an inline, quoted or nested table, a quoted or
+# in a form this does not edit (an inline, quoted or nested table, or an
 # escaped key), the apply fails and leaves it. Other machines' values are left
 # as they are.
 {{- $manage := .is_server }}
