@@ -84,6 +84,36 @@ for machine in serveserve otherlinux; do
         || fail "$machine: manages $(tr '\n' ' ' <<< "$got")"
 done
 
+# The runbook's first apply, into fresh homes: only the directories it tells
+# you to create exist beforehand, and only its targets are applied.
+runbook="$WORK/runbook-mac"
+mkdir -p "$runbook/Library/LaunchAgents"
+if chez apply mac "$runbook" "$runbook/Library/Deskflow" \
+    "$runbook/Library/LaunchAgents/com.marsh.deskflow.plist" > "$WORK/out" 2>&1; then
+    missing=
+    for f in Library/Deskflow/Deskflow.conf Library/Deskflow/deskflow-server.conf \
+        Library/LaunchAgents/com.marsh.deskflow.plist; do
+        [ -s "$runbook/$f" ] || missing+="$f "
+    done
+    [ -z "$missing" ] && pass "runbook (mac): apply creates Deskflow.conf, the layout and the plist" \
+        || fail "runbook (mac): apply succeeded but missing $missing"
+else
+    fail "runbook (mac): apply failed: $(tr '\n' ';' < "$WORK/out")"
+fi
+runbook="$WORK/runbook-marshbox"
+mkdir -p "$runbook/.var/app/org.deskflow.deskflow/config/Deskflow" "$runbook/.config/autostart"
+if HOMEDIR=$runbook chez apply marshbox "$runbook" "$runbook/.var/app/org.deskflow.deskflow" \
+    "$runbook/.config/autostart/org.deskflow.deskflow.desktop" > "$WORK/out" 2>&1; then
+    missing=
+    for f in "$BOX_CONF" .config/autostart/org.deskflow.deskflow.desktop; do
+        [ -s "$runbook/$f" ] || missing+="$f "
+    done
+    [ -z "$missing" ] && pass "runbook (marshbox): apply creates Deskflow.conf and the autostart entry" \
+        || fail "runbook (marshbox): apply succeeded but missing $missing"
+else
+    fail "runbook (marshbox): apply failed: $(tr '\n' ';' < "$WORK/out")"
+fi
+
 # --- 2. the Deskflow.conf modify scripts ------------------------------------
 
 MAC_FRESH="[core]
@@ -219,24 +249,37 @@ tlsEnabled=true
 checkPeerFingerprints=true
 "
 
-# Every awk on this box, each put first on PATH as `awk` for the render.
-awks=()
-for candidate in mawk gawk original-awk nawk "busybox awk"; do
+# resolve PATH: the executable PATH finally points at.
+resolve() {
+    readlink -f "$1" 2>/dev/null || realpath "$1" 2>/dev/null || printf '%s\n' "$1"
+}
+
+# Every awk on this box, each put first on PATH as `awk` for the render: the
+# default awk, /usr/bin/awk if something shadows it, and every other awk
+# found by name. Each executable runs once, however many names lead to it
+# (nawk and awk are often alternatives links to mawk). busybox dispatches on
+# argv[0], so a link named awk to it is busybox awk.
+awks=() reals=" "
+for candidate in awk /usr/bin/awk mawk gawk original-awk nawk onetrue-awk bwk-awk "busybox awk"; do
     set -- $candidate
     bin=$(command -v "$1" || true)
     [ -n "$bin" ] || continue
-    real=$(readlink -f "$bin")
+    real=$(resolve "$bin")
+    case $reals in *" $real "*) continue ;; esac
     if [ "$1" = busybox ]; then
-        "$bin" awk 'BEGIN{}' 2>/dev/null || continue
+        "$bin" awk 'BEGIN{}' </dev/null 2>/dev/null || continue
     else
-        # nawk is often an alternatives link to mawk; run each awk once.
-        for seen in ${awks[@]+"${awks[@]}"}; do
-            [ "$(readlink -f "$(cut -d: -f2 <<< "$seen")")" = "$real" ] && continue 2
-        done
+        "$bin" 'BEGIN{}' </dev/null 2>/dev/null || continue
     fi
-    awks+=("$1:$bin")
+    name=${real##*/}
+    case " ${awks[*]+${awks[*]%%:*}} " in *" $name "*) name=$name-${#awks[@]} ;; esac
+    awks+=("$name:$real") reals+="$real "
 done
-pass "awks found: $(for a in "${awks[@]}"; do printf '%s ' "${a%%:*}"; done)"
+if [ ${#awks[@]} -eq 0 ]; then
+    fail "no awk found; the modify scripts are untested"
+else
+    pass "awks found: $(for a in "${awks[@]}"; do printf '%s ' "${a%%:*}"; done)"
+fi
 
 # modify_case AWK MACHINE CONF TARGET LABEL INPUT EXPECTED [HOST [REMOTE]]:
 # apply TARGET over CONF holding INPUT (absent if INPUT is "-"), with HOST in
@@ -277,9 +320,8 @@ modify_case() {
         || fail "$machine/$awk_name: $label changes on a second apply"
 }
 
-for entry in "${awks[@]}"; do
+for entry in ${awks[@]+"${awks[@]}"}; do
     name=${entry%%:*} bin=${entry#*:}
-    # busybox dispatches on argv[0], so a link named awk is busybox awk.
     modify_case "$name" "$bin" mac "$MAC_CONF" Library/Deskflow "no existing file" - "$MAC_FRESH"
     modify_case "$name" "$bin" mac "$MAC_CONF" Library/Deskflow "a GUI-written CRLF file" \
         "$MAC_EXISTING" "$MAC_EXPECTED" - example
