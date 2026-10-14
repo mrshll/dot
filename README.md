@@ -49,6 +49,37 @@ to herdr. **Alt+6** returns to this workspace. Run the launcher again after
 changing monitors to restore the proportions. Closing Kitty detaches the
 herdr clients; remote agents keep running.
 
+## Deskflow (Mac → marshbox)
+
+The keyboard and mouse plugged into the Mac also drive marshbox, on its own
+display: [Deskflow](https://github.com/deskflow/deskflow) with the Mac as
+server and marshbox as client, TLS on and both fingerprints trusted. marshbox
+sits to the right of the Mac (`Library/Deskflow/deskflow-server.conf`).
+
+It's meant for the home LAN only: both ends use the Mac's home LAN address,
+never a Tailscale name or 100.x address. The Mac has a DHCP reservation on
+the home router. The server listens on that address alone,
+read from `~/Library/Deskflow/listen-address`, and marshbox connects to it,
+read from `remote-host` beside its Deskflow.conf. Both are uncommitted
+one-line files, so the address stays out of this repo. Anything but a
+private IPv4 address there (a Tailscale name or 100.x address, a hostname,
+nothing at all) falls back to loopback. Away from home the Mac doesn't hold
+the address, so the server can't listen (unless another network happens to
+hand it the same one; mutual TLS still turns away anything but marshbox).
+
+On the Mac, Deskflow runs only when started by hand: open the app at home
+before using it, and quit it before leaving. Nothing starts it at login, so
+it never comes up on whatever network the Mac is on. marshbox stays home and
+starts its client at login from an XDG autostart entry (Flatpak, since Ubuntu
+24.04 has no package). Each app starts its own core.
+
+`modify_Deskflow.conf` owns only the role, name, address and TLS keys; the
+app keeps everything else. Quit Deskflow before applying, or the running app
+may write its own values back.
+
+marshbox runs the client only inside a graphical session, so its login screen
+gets no input from the Mac: log in there with marshbox's own spare keyboard.
+
 ## What's managed
 
 | Target | Source | Notes |

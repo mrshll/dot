@@ -1,0 +1,15 @@
+#!/bin/sh
+# Deskflow on marshbox: a client of the Mac. This is the Flatpak's config
+# directory. The server is the Mac's home LAN address, read from remote-host
+# beside this file (written by hand, never committed, so the address stays
+# out of this repo). Home LAN only: anything but a private IPv4 address,
+# including a Tailscale name or 100.x address, points the client at loopback.
+set -eu
+{{ template "deskflow-address.sh" . }}
+settings="client/remoteHost=$(home_address "{{ .chezmoi.homeDir }}/.var/app/org.deskflow.deskflow/config/Deskflow/remote-host")
+core/coreMode=1
+core/computerName=marshbox
+gui/startCoreWithGui=true
+security/tlsEnabled=true
+security/checkPeerFingerprints=true"
+{{ template "deskflow-settings.sh" . }}

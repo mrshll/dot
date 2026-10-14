@@ -160,6 +160,22 @@ install_chezmoi_linux() {
     export PATH="$HOME/.local/bin:$PATH"
 }
 
+install_deskflow_linux() {
+    # Ubuntu 24.04 has no deskflow package and upstream stopped building noble
+    # .debs; Flathub tracks upstream releases. A per-user install needs no sudo.
+    if ! command_exists flatpak; then
+        warn "deskflow not installed — needs flatpak (sudo apt install flatpak)"
+        return
+    fi
+    if flatpak info --user org.deskflow.deskflow >/dev/null 2>&1; then
+        info "deskflow already installed (flatpak)"
+        return
+    fi
+    info "Installing deskflow via flatpak (user, Flathub)..."
+    flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    flatpak install --user --noninteractive flathub org.deskflow.deskflow
+}
+
 # --- main -------------------------------------------------------------------
 
 info "Setting up on $OS ($(hostname))"
@@ -181,6 +197,13 @@ install_pkg    chezmoi   chezmoi      USER
 
 install_pkg    op        1password-cli CUSTOM
 install_pkg    vlc       vlc          vlc
+
+# marshbox takes the Mac's keyboard and mouse over Deskflow (the Mac gets it
+# from the Brewfile). No other Linux box needs it.
+if [ "$OS" = Linux ] && [ "$(hostname -s)" = marshbox ]; then
+    install_pkg flatpak  -            flatpak
+    install_deskflow_linux
+fi
 
 echo
 info "All tools installed. Next steps:"

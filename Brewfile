@@ -36,6 +36,10 @@ brew "overmind"
 #   brew tap nikitabobko/tap && brew trust nikitabobko/tap
 tap "nikitabobko/tap"
 cask "nikitabobko/tap/aerospace"
+# Deskflow shares this keyboard and mouse with marshbox. Same one-time trust:
+#   brew tap deskflow/tap && brew trust deskflow/tap
+tap "deskflow/tap"
+cask "deskflow/tap/deskflow"
 cask "1password-cli"
 cask "espanso"
 cask "google-chrome"
