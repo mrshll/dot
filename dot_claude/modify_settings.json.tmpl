@@ -10,6 +10,8 @@
 #   defaults  — seed for a fresh machine with no live file yet
 #   live      — the current on-disk file; UI-toggled prefs persist across syncs
 #   enforced  — keys we *do* want identical everywhere; source always wins
+# then env_enforced is merged key by key into the live "env", so variables set
+# by hand there survive.
 set -euo pipefail
 
 live="$(cat)"
@@ -95,8 +97,19 @@ enforced='{
   }
 }'
 
+# serveserve: Claude Code's commands run git as mrshll-agent, authoring and
+# signing with its key (dot_config/git/agent.gitconfig.tmpl). Marsh's own
+# shells keep ~/.gitconfig.
+{{ if .is_server -}}
+env_enforced='{ "GIT_CONFIG_GLOBAL": {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }} }'
+{{- else -}}
+env_enforced='{}'
+{{- end }}
+
 jq -n \
   --argjson defaults "$defaults" \
   --argjson live "$live" \
   --argjson enforced "$enforced" \
-  '$defaults + $live + $enforced'
+  --argjson env_enforced "$env_enforced" \
+  '$defaults + $live + $enforced
+   | if $env_enforced == {} then . else .env = (($live.env // {}) + $env_enforced) end'

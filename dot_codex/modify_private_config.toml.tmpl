@@ -1,0 +1,37 @@
+#!/bin/sh
+# Preserve Codex-managed local state; manage only Cloudflare MCP entries and,
+# on serveserve, the git identity of the commands Codex runs.
+set -eu
+awk '
+/^\[/ {
+    skip = ($0 ~ /^\[mcp_servers\.(cloudflare|cloudflare-docs|cloudflare-bindings|cloudflare-builds|cloudflare-observability)(\]|\.)/) ||
+        ($0 ~ /^\[shell_environment_policy\.set\]/)
+}
+!skip { print }
+'
+{{- if .is_server }}
+# serveserve: Codex's commands run git as mrshll-agent, authoring and signing
+# with its key (dot_config/git/agent.gitconfig.tmpl). Marsh's own shells keep
+# ~/.gitconfig.
+cat <<'TOML'
+[shell_environment_policy.set]
+GIT_CONFIG_GLOBAL = {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}
+
+TOML
+{{- end }}
+cat <<'TOML'
+[mcp_servers.cloudflare]
+url = "https://mcp.cloudflare.com/mcp"
+
+[mcp_servers.cloudflare-docs]
+url = "https://docs.mcp.cloudflare.com/mcp"
+
+[mcp_servers.cloudflare-bindings]
+url = "https://bindings.mcp.cloudflare.com/mcp"
+
+[mcp_servers.cloudflare-builds]
+url = "https://builds.mcp.cloudflare.com/mcp"
+
+[mcp_servers.cloudflare-observability]
+url = "https://observability.mcp.cloudflare.com/mcp"
+TOML
