@@ -73,9 +73,14 @@ EOF
 cat > "$WORK/bin/other-helper" <<'EOF'
 #!/usr/bin/env bash
 cat >/dev/null
+echo "$1" >> "$STUB/other-helper.log"
 printf 'username=someone-else\npassword=checkout-helper-token\n'
 EOF
 chmod +x "$WORK/bin/"*
+# A passh that resolves the item to nothing.
+mkdir -p "$WORK/emptybin"
+printf '#!/usr/bin/env bash\nshift 3; GH_TOKEN= exec "$@"\n' > "$WORK/emptybin/passh"
+chmod +x "$WORK/emptybin/passh"
 # ~/.gitconfig's GitHub helper, as dot_gitconfig.tmpl renders it (gh on PATH).
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n' \
     > "$WORK/home/.gitconfig"
@@ -84,10 +89,18 @@ git -C "$WORK/repo" config credential.https://github.com.helper ""
 git -C "$WORK/repo" config --add credential.https://github.com.helper "!$WORK/bin/other-helper"
 git -C "$WORK/repo" config credential.helper "!$WORK/bin/other-helper"
 git -C "$WORK/repo" config credential.https://github.com/mrshll.helper "!$WORK/bin/other-helper"
-# credential WRAPPER...: the password git would push github.com with.
+# credential WRAPPER...: the password git would push github.com/mrshll/dot
+# with, path-scoped helpers included, after which git stores it. The checkout's
+# helper must see neither.
 credential() {
-    printf 'protocol=https\nhost=github.com\n\n' |
-        run "$@" git -C "$WORK/repo" credential fill 2>/dev/null | sed -n 's/^password=//p'
+    rm -f "$STUB/other-helper.log"
+    local filled
+    filled=$(printf 'protocol=https\nhost=github.com\npath=mrshll/dot.git\n\n' |
+        run "$@" git -C "$WORK/repo" -c credential.useHttpPath=true credential fill 2>/dev/null)
+    printf '%s\n\n' "$filled" |
+        run "$@" git -C "$WORK/repo" -c credential.useHttpPath=true credential approve 2>/dev/null
+    [ ! -e "$STUB/other-helper.log" ] || echo "checkout helper ran: $(tr '\n' ' ' < "$STUB/other-helper.log")"
+    sed -n 's/^password=//p' <<<"$filled"
 }
 
 run() {
@@ -125,6 +138,10 @@ check "agent-gh: passh may not fall back to a password prompt" 'grep -qx "PASSH_
 check "agent-gh: command gets the passh-resolved agent token" \
     'grep -qx "GH_TOKEN=resolved:op://Private/Github agent/Token" <<<"$out" && grep -qx "PASSH_NO_FALLBACK=" <<<"$out"'
 
+out=$(run env PATH="$WORK/emptybin:$WORK/bin:/usr/bin:/bin" bash "$AGENT_GH" probe 2>/dev/null) && rc=0 || rc=$?
+check "agent-gh: an empty token from passh fails rather than running the command" \
+    '[ "$rc" -ne 0 ] && ! grep -q "^GH_TOKEN=" <<<"$out"'
+
 # --- agent-gh --seed ---------------------------------------------------------
 rm -f "$WORK/login-stdin" "$WORK/stored"
 run env GH_HOST=ghe.example.com GH_CONFIG_DIR="$WORK/elsewhere" bash "$AGENT_GH" --seed >/dev/null 2>&1 && seeded=0 || seeded=$?
@@ -155,10 +172,6 @@ check "mgh git: SSH remotes go over HTTPS" 'grep -qx "git@github.com:" <<<"$out"
 got=$(credential bash "$MGH")
 check "mgh git: pushes with Marsh's injected token, not a checkout's own helper" \
     '[ "$got" = "resolved:$(sed -n "s/^MARSH_TOKEN_REF=.\(.*\).$/\1/p" "$MGH")" ]'
-# A passh that resolves the item to nothing.
-mkdir -p "$WORK/emptybin"
-printf '#!/usr/bin/env bash\nshift 3; GH_TOKEN= exec "$@"\n' > "$WORK/emptybin/passh"
-chmod +x "$WORK/emptybin/passh"
 out=$(run env PATH="$WORK/emptybin:$WORK/bin:/usr/bin:/bin" bash "$MGH" pr list 2>/dev/null) && rc=0 || rc=$?
 check "mgh: an empty token fails rather than falling back to the stored agent login" \
     '[ "$rc" -ne 0 ] && ! grep -q "^gh-ran" <<<"$out"'

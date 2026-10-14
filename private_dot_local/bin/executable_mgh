@@ -6,9 +6,9 @@
 #
 # On serveserve gh's only stored login is the machine account, mrshll-agent
 # (agent-gh --seed). Marsh's token lives only in 1Password: this injects it
-# through passh for one command, never writing it anywhere, so acting as
-# mrshll from serveserve always goes through passh. SSH GitHub remotes go over
-# HTTPS for the command and git takes the token from gh, so a push is his.
+# through passh into one command's environment and saves it nowhere, so acting
+# as mrshll from serveserve goes through passh each time. SSH GitHub remotes go
+# over HTTPS for the command and git takes the token from gh, so a push is his.
 # Only authentication changes: `mgh git commit` authors and signs as the
 # checkout's git config says.
 set -euo pipefail
@@ -21,7 +21,9 @@ MARSH_TOKEN_REF='op://Private/Github mrshll/Token'
 
 unset GITHUB_TOKEN
 # Command-scope config outranks every config file: the empty helper drops any a
-# checkout sets, so git takes GH_TOKEN from gh and nothing else.
+# checkout sets for github.com, so git asks gh, which answers with GH_TOKEN. It
+# does not override credentials written into a remote URL or an
+# http.extraHeader; those are a checkout's own explicit choice.
 export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=4 \
     GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_0=git@github.com: \
     GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=ssh://git@github.com/ \

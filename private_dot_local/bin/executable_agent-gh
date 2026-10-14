@@ -52,7 +52,9 @@ fi
 
 unset GITHUB_TOKEN
 # Command-scope config outranks every config file: the empty helper drops any a
-# checkout sets, so git takes GH_TOKEN from gh and nothing else.
+# checkout sets for github.com, so git asks gh, which answers with GH_TOKEN. It
+# does not override credentials written into a remote URL or an
+# http.extraHeader; those are a checkout's own explicit choice.
 export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=4 \
     GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_0=git@github.com: \
     GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=ssh://git@github.com/ \
@@ -66,4 +68,6 @@ if token=$(env -u GH_TOKEN GH_CONFIG_DIR="$HOME/.config/gh" \
 fi
 PASSH_NO_FALLBACK=1 exec passh run \
     --env-file=<(printf 'GH_TOKEN=%s\n' "$AGENT_TOKEN_REF") \
-    -- env -u PASSH_NO_FALLBACK "$@"
+    -- env -u PASSH_NO_FALLBACK bash -c '
+        [ -n "${GH_TOKEN-}" ] || { echo "agent-gh: no token from 1Password" >&2; exit 1; }
+        exec "$@"' agent-gh "$@"
