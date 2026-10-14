@@ -35,10 +35,13 @@ bean=1
 bean=
 {{- end }}
 live=$(cat)
+# uv, if found, checks the result (below); sync.sh's ssh shell may not have it on PATH.
+uv=$(command -v uv || { for u in "$HOME/.local/bin/uv" /opt/homebrew/bin/uv; do [ -x "$u" ] && echo "$u" && break; done; } || true)
 out=$(printf '%s' "$live" | awk -v manage="$manage" -v gitconfig="$gitconfig" -v ghconfig="$ghconfig" \
-    -v bean="$bean" -v beandata="$beandata" -v beanconfig="$beanconfig" '
+    -v bean="$bean" -v beandata="$beandata" -v beanconfig="$beanconfig" -v checked="$uv" '
 # scan(LINE): follow TOML strings and comments through LINE, so instr says
-# whether a multi-line string is still open at its end.
+# whether a multi-line string is still open at its end, and depth how many
+# arrays are.
 function scan(s,   i, n, c) {
     n = length(s); i = 1
     while (i <= n) {
@@ -60,7 +63,11 @@ function scan(s,   i, n, c) {
         } else if (c == "\047") {
             for (i++; i <= n && substr(s, i, 1) != "\047"; i++) ;
             i++
-        } else i++
+        } else {
+            if (c == "[") depth++
+            else if (c == "]") depth--
+            i++
+        }
     }
 }
 # holds(KEY, PATH): this line sets KEY to exactly PATH, quoted, then at most a comment.
@@ -125,7 +132,7 @@ function roots(   r, k, n, lines, list, data, config, changed) {
         else print coll
     }
     # Whatever was printed, follow its strings line by line, as the rest is.
-    instr = ""; n = split(coll, lines, "\n")
+    instr = ""; depth = 0; n = split(coll, lines, "\n")
     for (k = 1; k <= n; k++) scan(lines[k])
 }
 # pending(): this table, or the top level holding sandbox_workspace_write
@@ -148,15 +155,14 @@ BEGIN {
     beanroots = "[\"" beandata "\", \"" beanconfig "\"]"
     section = "top"
 }
-# mentions: a Bean path appears somewhere, so a form this does not edit may hold it.
-index($0, beandata) || index($0, beanconfig) { mentions = 1 }
 # Inside writable_roots: gather it until it closes.
 incoll { coll = coll "\n" $0; roots(); next }
 # Inside a multi-line string: copy it as it is, whatever it looks like.
 instr != "" { scan($0); if (!skip) print; next }
-# opening: the multi-line string this line leaves open, if any.
-{ scan($0); opening = instr }
-/^[ \t]*\[/ {
+# opening: the multi-line string this line leaves open, if any; inarray: this
+# line goes on with an array, so a "[" starting it opens an element, not a table.
+{ inarray = depth > 0; scan($0); opening = instr }
+/^[ \t]*\[/ && !inarray {
     endsection()
     section = ($0 ~ /^[ \t]*\[[ \t]*sandbox_workspace_write[ \t]*\][ \t]*(#.*)?$/) ? "sw" : "other"
     if (section == "sw") swtable = 1
@@ -174,8 +180,8 @@ pending() && /^[ \t\r]*(#.*)?$/ { held = held $0 "\n"; next }
 { printf "%s", held; held = "" }
 # writable_roots in the [sandbox_workspace_write] table, or as a dotted key at
 # the top level (an inline table there is a form this does not edit).
-section == "sw" && /^[ \t]*["\047]?writable_roots["\047]?[ \t]*=/ ||
-section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\.[ \t]*["\047]?writable_roots["\047]?[ \t]*=/ {
+!inarray && section == "sw" && /^[ \t]*["\047]?writable_roots["\047]?[ \t]*=/ ||
+!inarray && section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\.[ \t]*["\047]?writable_roots["\047]?[ \t]*=/ {
     coll = $0; roots(); next
 }
 section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\./ { swdotted = 1 }
@@ -196,9 +202,9 @@ END {
     if (incoll) { swother = rootsseen = 1; print coll }
     endsection()
     if (bean && !rootsseen && !added && !swtable && !swdotted && !swother) printf "\n[sandbox_workspace_write]\nwritable_roots = %s\n", beanroots
-    # Not editing it fails the apply where the Bean paths go in, or may have to
-    # come out: without uv, nothing else would notice them left in.
-    if (swfail || swother && (bean || mentions)) {
+    # Not editing it fails the apply where the Bean paths go in, or where they
+    # may have to come out and no check follows to notice them left in.
+    if (swfail || swother && (bean || !checked)) {
         print "codex config: sandbox_workspace_write.writable_roots is in a form this script does not edit;" > "/dev/stderr"
         print "  make it an array of one-line strings without escapes or comments inside, in a plain" > "/dev/stderr"
         print "  [sandbox_workspace_write] table or as a top-level dotted key, then apply again" > "/dev/stderr"
@@ -235,10 +241,8 @@ TOML
 # managing and neither agent value otherwise, hold the live writable_roots in
 # order with the Bean paths appended or removed, and equal the live config in
 # everything else (Cloudflare entries aside), or apply fails and leaves the live
-# file as it is. sync.sh's ssh shell may not have uv on PATH. Without uv the
-# check is required on serveserve, whichever toggles are rolled back, and
-# skipped elsewhere.
-uv=$(command -v uv || { for u in "$HOME/.local/bin/uv" /opt/homebrew/bin/uv; do [ -x "$u" ] && echo "$u" && break; done; } || true)
+# file as it is. Without uv the check is required on serveserve, whichever
+# toggles are rolled back, and skipped elsewhere.
 if [ -n "$uv" ]; then
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

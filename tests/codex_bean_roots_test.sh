@@ -125,6 +125,9 @@ writable_roots = ["/example"]
 """
 model = "kept"
 TOML
+# A line in an array that starts with "[" opens an element, not a table.
+printf 'x = [\n  [1],\n]\nsandbox_workspace_write.writable_roots = ["/a"]\n' > "$WORK/live/nested-top.toml"
+printf '[sandbox_workspace_write]\nx = [\n  [1],\n]\nwritable_roots = ["/a"]\n' > "$WORK/live/nested-table.toml"
 # One of Bean's paths is there already: only the other is appended.
 printf '[sandbox_workspace_write]\nwritable_roots = ["/a", "%s"]\n' "$CONF" > "$WORK/live/one.toml"
 # Both are there, with a comment inside: nothing to edit, so it stays as it is.
@@ -198,8 +201,8 @@ sh "$WORK/no-identity.sh" < "$WORK/both.toml" > "$WORK/out.toml"
 check "identity rolled back: Bean's roots stay" '[ "$(json "$WORK/out.toml")" = "$(json "$WORK/both.toml")" ]'
 
 # Without uv nothing checks the result: elsewhere it is still emitted, so a
-# Bean path in a form the script does not edit fails the apply rather than
-# stay; on serveserve, with both toggles rolled back, uv is still required.
+# form the script does not edit fails the apply rather than maybe keep a Bean
+# path; on serveserve, with both toggles rolled back, uv is still required.
 mkdir -p "$WORK/nouv"
 ln -s "$(command -v awk)" "$WORK/nouv/awk"; ln -s "$(command -v cat)" "$WORK/nouv/cat"
 nouv() { HOME="$WORK/nouv" PATH="$WORK/nouv" /bin/sh "$@"; }
@@ -207,6 +210,13 @@ printf '["sandbox_workspace_write"]\nwritable_roots = ["%s"]\n' "$DATA" > "$WORK
 nouv "$WORK/elsewhere.sh" < "$WORK/quoted-bean.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
 check "elsewhere, no uv: a Bean path in a form it does not edit fails the apply" \
     '[ "$rc" -ne 0 ] && grep -q "form this script does not edit" "$WORK/err" && [ ! -s "$WORK/out.toml" ]'
+printf '[sandbox_workspace_write]\nwritable_roots = ["%s"]\n' "${DATA%bean}\\u0062ean" > "$WORK/escaped-bean.toml"
+nouv "$WORK/elsewhere.sh" < "$WORK/escaped-bean.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
+check "elsewhere, no uv: an escaped path, maybe Bean's, fails the apply" \
+    '[ "$rc" -ne 0 ] && grep -q "form this script does not edit" "$WORK/err" && [ ! -s "$WORK/out.toml" ]'
+nouv "$WORK/elsewhere.sh" < "$WORK/server-nested-top.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
+check "elsewhere, no uv: Bean's paths come out past a nested array" \
+    '[ "$rc" -eq 0 ] && [ "$(json "$WORK/out.toml")" = "$(json "$WORK/live/nested-top.toml")" ]'
 nouv "$WORK/elsewhere.sh" < "$WORK/server-table.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
 check "elsewhere, no uv: Bean's paths still come out of a table" \
     '[ "$rc" -eq 0 ] && [ "$(json "$WORK/out.toml")" = "$(json "$WORK/live/table.toml")" ]'
