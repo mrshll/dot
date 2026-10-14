@@ -30,12 +30,13 @@ if [ "${1-}" = --seed ]; then
     # stores it, travels under another name (gh refuses to log in while GH_TOKEN
     # or GITHUB_TOKEN is set) and reaches gh on stdin. --insecure-storage: a
     # plain 0600 file, never a keyring a headless box can't unlock.
-    unset GH_TOKEN GITHUB_TOKEN
+    # gh's default config and github.com, whatever the shell inherited.
+    unset GH_TOKEN GITHUB_TOKEN GH_CONFIG_DIR GH_HOST
     PASSH_NO_FALLBACK=1 passh run \
         --env-file=<(printf 'AGENT_GH_SEED=%s\n' "$AGENT_TOKEN_REF") \
         -- env -u PASSH_NO_FALLBACK sh -c '
             [ -n "${AGENT_GH_SEED-}" ] || { echo "agent-gh: empty token" >&2; exit 1; }
-            login=$(GH_TOKEN=$AGENT_GH_SEED gh api user --jq .login) || exit 1
+            login=$(GH_TOKEN=$AGENT_GH_SEED gh api --hostname github.com user --jq .login) || exit 1
             [ "$login" = mrshll-agent ] || {
                 printf "agent-gh: that token is %s, not mrshll-agent; nothing stored\n" "$login" >&2
                 exit 1

@@ -28,6 +28,7 @@ mkdir -p "$WORK/bin" "$WORK/home"
 cat > "$WORK/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s|GH_TOKEN=%s\n' "$*" "${GH_TOKEN-}" >> "$STUB/gh.log"
+printf 'GH_HOST=%s GH_CONFIG_DIR=%s\n' "${GH_HOST-}" "${GH_CONFIG_DIR-}" >> "$STUB/gh-env.log"
 case "$1 $2" in
     "auth token")
         case " $* " in
@@ -40,7 +41,9 @@ case "$1 $2" in
     "auth login")
         [ -z "${GH_TOKEN-}${GITHUB_TOKEN-}" ] || exit 1
         cat > "$STUB/login-stdin"; touch "$STUB/stored" ;;
-    "api user") cat "$STUB/login-as" 2>/dev/null || echo mrshll-agent ;;
+    "api --hostname")
+        [ "$3 $4" = "github.com user" ] || { echo "not github.com" >&2; exit 1; }
+        cat "$STUB/login-as" 2>/dev/null || echo mrshll-agent ;;
     *) printf 'gh-ran %s GH_TOKEN=%s\n' "$*" "${GH_TOKEN-}" ;;
 esac
 EOF
@@ -62,7 +65,7 @@ EOF
 chmod +x "$WORK/bin/"*
 
 run() {
-    rm -f "$STUB/gh.log" "$STUB/passh.log"
+    rm -f "$STUB/gh.log" "$STUB/gh-env.log" "$STUB/passh.log"
     env -u GH_TOKEN -u GITHUB_TOKEN HOME="$WORK/home" STUB="$WORK" \
         PATH="$WORK/bin:/usr/bin:/bin" "$@"
 }
@@ -93,13 +96,15 @@ check "agent-gh: command gets the passh-resolved agent token" \
 
 # --- agent-gh --seed ---------------------------------------------------------
 rm -f "$WORK/login-stdin" "$WORK/stored"
-run bash "$AGENT_GH" --seed >/dev/null 2>&1 && seeded=0 || seeded=$?
+run env GH_HOST=ghe.example.com GH_CONFIG_DIR="$WORK/elsewhere" bash "$AGENT_GH" --seed >/dev/null 2>&1 && seeded=0 || seeded=$?
 check "agent-gh --seed: succeeds" '[ "$seeded" -eq 0 ]'
+check "agent-gh --seed: github.com and gh's default config, whatever was inherited" \
+    '[ "$(sort -u "$WORK/gh-env.log")" = "GH_HOST= GH_CONFIG_DIR=" ]'
 check "agent-gh --seed: checks whose token it is before storing it" \
-    'grep -q "^api user --jq .login|GH_TOKEN=resolved:op://Private/Github agent/Token$" "$WORK/gh.log"'
+    'grep -q "^api --hostname github.com user --jq .login|GH_TOKEN=resolved:op://Private/Github agent/Token$" "$WORK/gh.log"'
 check "agent-gh --seed: one passh call for the agent item, not as GH_TOKEN" \
     '[ "$(grep -c "op://" "$WORK/passh.log")" -eq 1 ] && grep -q "=op://Private/Github agent/Token$" "$WORK/passh.log" && ! grep -q "^GH_TOKEN=" "$WORK/passh.log"'
-check "agent-gh --seed: gh stores it in its file, 0600, over https" \
+check "agent-gh --seed: gh stores it as a plain file, not a keyring, over https" \
     'grep -q "^auth login --hostname github.com --git-protocol https --insecure-storage --with-token|GH_TOKEN=$" "$WORK/gh.log"'
 check "agent-gh --seed: token arrives on stdin" '[ "$(cat "$WORK/login-stdin")" = "resolved:op://Private/Github agent/Token" ]'
 echo mrshll > "$WORK/login-as"
