@@ -182,7 +182,7 @@ instr != "" { scan($0); if (!skip) print; next }
     section = ($0 ~ /^[ \t]*\[[ \t]*sandbox_workspace_write[ \t]*\][ \t]*(#.*)?$/) ? "sw" : "other"
     if (section == "sw") swtable = 1
     # Any other spelling of the table (quoted, nested) is one this does not edit.
-    else if ($0 ~ /^[ \t]*\[+[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*(\]|\.)/) swother = 1
+    else if ($0 ~ /^[ \t]*\[+[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*(\]|\.)/) swother = swform = 1
     skip = ($0 ~ /^\[mcp_servers\.(cloudflare|cloudflare-docs|cloudflare-bindings|cloudflare-builds|cloudflare-observability)(\]|\.)/)
     inset = ($0 ~ /^[ \t]*\[[ \t]*shell_environment_policy[ \t]*\.[ \t]*set[ \t]*\][ \t]*(#.*)?$/)
     inpolicy = ($0 ~ /^[ \t]*\[[ \t]*shell_environment_policy[ \t]*\][ \t]*(#.*)?$/)
@@ -207,13 +207,15 @@ server && !inarray && (section == "sw" && /^[ \t]*["\047]?network_access["\047]?
     section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\.[ \t]*["\047]?network_access["\047]?[ \t]*=/) {
     if (section == "top") swdotted = 1
     netseen = 1
-    if ($0 !~ /=[ \t]*(true|false)[ \t]*(#.*)?$/) { netfail = 1; print; next }
-    if (net) sub(/=[ \t]*false/, "= true")
-    else if ($0 ~ /=[ \t]*true[ \t]*(#.*)?$/) next
+    # rest: the value, then at most a comment, which may hold anything.
+    rest = $0; sub(/^[^=]*=[ \t]*/, "", rest)
+    if (rest !~ /^(true|false)[ \t\r]*(#.*)?$/) { netfail = 1; print; next }
+    if (net && rest ~ /^false/) $0 = substr($0, 1, length($0) - length(rest)) "true" substr(rest, 6)
+    else if (!net && rest ~ /^true/) next
     print; next
 }
 section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\./ { swdotted = 1 }
-section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*=/ { swother = 1 }
+section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*=/ { swother = swform = 1 }
 inset &&/^[ \t]*["\047]?(GIT_CONFIG_GLOBAL|GH_CONFIG_DIR)["\047]?[ \t]*=/ {
     # A multi-line value is not something this edits.
     if (opening != "") other = 1
@@ -243,8 +245,9 @@ END {
         print "  [sandbox_workspace_write] table or as a top-level dotted key, then apply again" > "/dev/stderr"
         exit 1
     }
-    # The same for network_access, where it goes in or holds a value this does not edit.
-    if (netfail || net && swother) {
+    # The same for network_access: a value it does not edit, or a table it does not
+    # edit (swform: quoted, nested or inline) where the key goes in.
+    if (netfail || net && swform) {
         print "codex config: sandbox_workspace_write.network_access is in a form this script does not edit;" > "/dev/stderr"
         print "  make it network_access = true or false in a plain [sandbox_workspace_write] table" > "/dev/stderr"
         print "  or as a top-level dotted key, then apply again" > "/dev/stderr"

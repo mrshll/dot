@@ -41,6 +41,7 @@ render true > "$WORK/server.sh"
 render false > "$WORK/elsewhere.sh"
 render true net > "$WORK/rollback.sh"
 render true bean > "$WORK/no-bean.sh"
+render true bean net > "$WORK/neither.sh"
 render true manage bean net > "$WORK/rolled-back.sh"
 
 # json FILE: the TOML as JSON, leaving out the Cloudflare MCP entries and the
@@ -94,6 +95,12 @@ sandbox_workspace_write.writable_roots = ["/a"]
 [tui]
 x = 1
 TOML
+# A comment after the value is text, whatever it says.
+printf '[sandbox_workspace_write]\nnetwork_access = false # previously = true\n' > "$WORK/live/comment-false.toml"
+printf 'sandbox_workspace_write.network_access = true # previously = false\n' > "$WORK/live/comment-true.toml"
+# CRLF after the value (the last line ending is LF: $(cat) drops a final CR).
+printf 'sandbox_workspace_write.network_access = false\r\n[tui]\nx = 1\n' > "$WORK/live/crlf-false.toml"
+printf '[sandbox_workspace_write]\nnetwork_access = true\r\n[tui]\nx = 1\n' > "$WORK/live/crlf-true.toml"
 printf 'model = "kept"\n' > "$WORK/live/none.toml"
 : > "$WORK/live/empty.toml"
 # The key inside a multi-line string is text; a line in an array that starts with "[" opens an element.
@@ -141,6 +148,12 @@ check "table-true, serveserve: nothing to change, byte for byte" \
     'head -n 8 "$WORK/server-table-true.toml" | cmp -s - "$WORK/live/table-true.toml"'
 check "table-false, serveserve: the live line becomes true, its comment kept" \
     "grep -qxF '\"network_access\" = true  # mine' \"\$WORK/server-table-false.toml\""
+check "comment-false, serveserve: only the value changes, not the comment" \
+    "grep -qxF 'network_access = true # previously = true' \"\$WORK/server-comment-false.toml\""
+check "comment-true, serveserve: nothing to change, byte for byte" \
+    'head -n 1 "$WORK/server-comment-true.toml" | cmp -s - "$WORK/live/comment-true.toml"'
+check "crlf-false, serveserve: the value changes, the CR stays" \
+    "head -n 1 \"\$WORK/server-crlf-false.toml\" | cmp -s - <(printf 'sandbox_workspace_write.network_access = true\\r\\n')"
 check "table-without, serveserve: the key goes at the end of its table, before the blank line" \
     "[ \"\$(sed -n 2,4p \"\$WORK/server-table-without.toml\")\" = \"\$(printf 'writable_roots = [\"/a\", \"%s\", \"%s\"]\\nnetwork_access = true\\n' \"\$DATA\" \"\$CONF\")\" ]"
 check "dotted-false, serveserve: the dotted key becomes true in place" \
@@ -183,6 +196,21 @@ printf 'sandbox_workspace_write = { network_access = false }\n' > "$WORK/inline.
 sh "$WORK/no-bean.sh" < "$WORK/inline.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
 check "inline table, serveserve without Bean: fails the apply, with the reason" \
     '[ "$rc" -ne 0 ] && grep -q "network_access is in a form this script does not edit" "$WORK/err" && [ ! -s "$WORK/out.toml" ]'
+# Rolling back both, an inline table is left as it is where it does not hold
+# true; where it does, the check fails the apply rather than leave it.
+sh "$WORK/neither.sh" < "$WORK/inline.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
+check "inline table false, Bean and network rolled back: passes unchanged" \
+    '[ "$rc" -eq 0 ] && [ "$(json "$WORK/out.toml")" = "$(json "$WORK/inline.toml")" ]'
+printf 'sandbox_workspace_write = { network_access = true }\n' > "$WORK/inline-true.toml"
+sh "$WORK/neither.sh" < "$WORK/inline-true.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
+check "inline table true, Bean and network rolled back: fails the apply rather than leave it" \
+    '[ "$rc" -ne 0 ] && grep -q "expected network_access" "$WORK/err" && [ ! -s "$WORK/out.toml" ]'
+# A writable_roots the scanner does not edit is Bean's concern: with Bean
+# rolled back and nothing to remove, the network key is still set.
+printf '[sandbox_workspace_write]\nwritable_roots = ["/t\\u006dp"]\nnetwork_access = false\n' > "$WORK/escaped-roots.toml"
+sh "$WORK/no-bean.sh" < "$WORK/escaped-roots.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
+check "escaped roots, serveserve without Bean: network_access set, roots left as they are" \
+    '[ "$rc" -eq 0 ] && [ "$(json "$WORK/out.toml")" = "$(json "$WORK/escaped-roots.toml" | net true)" ]'
 
 # The toggles are separate: rolling back the network leaves Bean's roots and
 # the agent identity, and rolling back Bean leaves the network.
