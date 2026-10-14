@@ -1,6 +1,7 @@
 #!/bin/sh
 # Preserve Codex-managed local state; manage only Cloudflare MCP entries and,
-# on serveserve, the GitHub identity of the commands Codex runs.
+# on serveserve, the GitHub identity of the commands Codex runs and Bean's
+# writable roots.
 set -eu
 # serveserve: Codex's commands run gh and git as mrshll-agent: gh reads the
 # agents' config (agent-gh --seed), and git authors and signs with its key and
@@ -9,16 +10,33 @@ set -eu
 # a plain [shell_environment_policy.set] table are managed. Everywhere else,
 # and to roll back (set $manage to false), they are removed where they still
 # hold exactly these values: nothing but this script puts them there.
+#
+# serveserve: Codex's workspace-write sandbox can also write Bean's data and
+# config (mrshll/pond, bean/), so bean runs without an approval prompt. Both
+# paths are appended to sandbox_workspace_write.writable_roots, after whatever
+# it already holds. A project .codex/config.toml can't do this: Codex replaces
+# arrays layer by layer, so it would drop the roots in this list. Everywhere
+# else, and to roll back (set $bean to false), both paths are removed from the
+# list, whoever put them there.
 {{- $manage := .is_server }}
+{{- $bean := .is_server }}
 gitconfig={{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}
 ghconfig={{ joinPath .chezmoi.homeDir ".config/gh-agent" | quote }}
+beandata={{ joinPath .chezmoi.homeDir ".local/share/pond/bean" | quote }}
+beanconfig={{ joinPath .chezmoi.homeDir ".config/pond/bean" | quote }}
 {{ if $manage -}}
 manage=1
 {{- else -}}
 manage=
 {{- end }}
+{{ if $bean -}}
+bean=1
+{{- else -}}
+bean=
+{{- end }}
 live=$(cat)
-out=$(printf '%s' "$live" | awk -v manage="$manage" -v gitconfig="$gitconfig" -v ghconfig="$ghconfig" '
+out=$(printf '%s' "$live" | awk -v manage="$manage" -v gitconfig="$gitconfig" -v ghconfig="$ghconfig" \
+    -v bean="$bean" -v beandata="$beandata" -v beanconfig="$beanconfig" '
 # scan(LINE): follow TOML strings and comments through LINE, so instr says
 # whether a multi-line string is still open at its end.
 function scan(s,   i, n, c) {
@@ -56,12 +74,92 @@ function holds(key, path,   rest, q, n) {
     }
     return 0
 }
-BEGIN { if (manage) managed = "GIT_CONFIG_GLOBAL = \"" gitconfig "\"\nGH_CONFIG_DIR = \"" ghconfig "\"" }
+# lexroots(S): read the array S starts with (the text after "writable_roots ="),
+# over lines joined by newlines. Sets nel, raw[k] (each element as written),
+# val[k] (its value), comment (one sits inside) and rest (what follows "]").
+# Returns 1 once the array closes, 0 if S ends first, and -1 for anything but
+# one-line strings without escapes.
+function lexroots(s,   i, n, c, j, want) {
+    n = length(s); i = 1; nel = 0; comment = 0
+    while (substr(s, i, 1) ~ /[ \t]/) i++
+    if (substr(s, i, 1) != "[") return -1
+    i++; want = "value"
+    while (i <= n) {
+        c = substr(s, i, 1)
+        if (c ~ /[ \t\r\n]/) { i++; continue }
+        if (c == "#") {
+            comment = 1
+            if (!(j = index(substr(s, i), "\n"))) return 0
+            i += j; continue
+        }
+        if (c == "]") { rest = substr(s, i + 1); return (rest ~ /^[ \t\r]*(#.*)?$/) ? 1 : -1 }
+        if (c == ",") { if (want != "comma") return -1; want = "value"; i++; continue }
+        if (want != "value" || (c != "\"" && c != "\047") || substr(s, i, 3) == c c c) return -1
+        if (!(j = index(substr(s, i + 1), c))) return -1
+        nel++; raw[nel] = substr(s, i, j + 1); val[nel] = substr(s, i + 1, j - 1)
+        if (val[nel] ~ /\n/ || (c == "\"" && val[nel] ~ /\\/)) return -1
+        i += j + 1; want = "comma"
+    }
+    return 0
+}
+# roots(): writable_roots, gathered in coll, has closed or may have. Print it
+# with the Bean paths appended (bean) or removed (not), or as it is if it
+# already has them or does not.
+function roots(   r, k, n, lines, list, data, config, changed) {
+    r = lexroots(substr(coll, index(coll, "=") + 1))
+    if (r == 0) { incoll = 1; return }
+    incoll = 0; rootsseen = 1
+    if (r < 0) { swother = 1; print coll }
+    else {
+        for (k = 1; k <= nel; k++) {
+            if (!bean && (val[k] == beandata || val[k] == beanconfig)) { changed = 1; continue }
+            if (val[k] == beandata) data = 1
+            if (val[k] == beanconfig) config = 1
+            list = list (list == "" ? "" : ", ") raw[k]
+        }
+        if (bean && !data) { list = list (list == "" ? "" : ", ") "\"" beandata "\""; changed = 1 }
+        if (bean && !config) { list = list (list == "" ? "" : ", ") "\"" beanconfig "\""; changed = 1 }
+        # Rewriting it on one line would drop a comment inside.
+        if (changed && comment) { swother = swfail = 1; print coll }
+        else if (changed) print substr(coll, 1, index(coll, "=")) " [" list "]" rest
+        else print coll
+    }
+    # Whatever was printed, follow its strings line by line, as the rest is.
+    instr = ""; n = split(coll, lines, "\n")
+    for (k = 1; k <= n; k++) scan(lines[k])
+}
+# pending(): this table, or the top level holding sandbox_workspace_write
+# dotted keys, still lacks the writable_roots it gets when it ends.
+function pending() {
+    return bean && !rootsseen && !added && (section == "sw" || (section == "top" && swdotted))
+}
+# endsection(): give a pending section its writable_roots, before the blank
+# lines and comments that end it.
+function endsection(   key) {
+    if (pending()) {
+        key = section == "top" ? "sandbox_workspace_write.writable_roots" : "writable_roots"
+        print key " = " beanroots
+        added = 1
+    }
+    printf "%s", held; held = ""
+}
+BEGIN {
+    if (manage) managed = "GIT_CONFIG_GLOBAL = \"" gitconfig "\"\nGH_CONFIG_DIR = \"" ghconfig "\""
+    beanroots = "[\"" beandata "\", \"" beanconfig "\"]"
+    section = "top"
+}
+# Inside writable_roots: gather it until it closes.
+incoll { coll = coll "\n" $0; roots(); next }
 # Inside a multi-line string: copy it as it is, whatever it looks like.
 instr != "" { scan($0); if (!skip) print; next }
 # opening: the multi-line string this line leaves open, if any.
 { scan($0); opening = instr }
 /^[ \t]*\[/ {
+    endsection()
+    section = ($0 ~ /^[ \t]*\[[ \t]*sandbox_workspace_write[ \t]*\][ \t]*(#.*)?$/) ? "sw" : "other"
+    if (section == "sw") swtable = 1
+    # Any other spelling of the table (quoted, nested) is one this does not edit.
+    else if ($0 ~ /^[ \t]*\[+[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*(\]|\.)/) swother = 1
     skip = ($0 ~ /^\[mcp_servers\.(cloudflare|cloudflare-docs|cloudflare-bindings|cloudflare-builds|cloudflare-observability)(\]|\.)/)
     inset = ($0 ~ /^[ \t]*\[[ \t]*shell_environment_policy[ \t]*\.[ \t]*set[ \t]*\][ \t]*(#.*)?$/)
     inpolicy = ($0 ~ /^[ \t]*\[[ \t]*shell_environment_policy[ \t]*\][ \t]*(#.*)?$/)
@@ -69,7 +167,18 @@ instr != "" { scan($0); if (!skip) print; next }
     if ($0 ~ /shell_environment_policy/ && !inset && !inpolicy) other = 1
     if (inset && manage) { print; print managed; done = 1; next }
 }
-inset && /^[ \t]*["\047]?(GIT_CONFIG_GLOBAL|GH_CONFIG_DIR)["\047]?[ \t]*=/ {
+# Hold the blank lines and comments that may end a pending section.
+pending() && /^[ \t\r]*(#.*)?$/ { held = held $0 "\n"; next }
+{ printf "%s", held; held = "" }
+# writable_roots in the [sandbox_workspace_write] table, or as a dotted key at
+# the top level (an inline table there is a form this does not edit).
+section == "sw" && /^[ \t]*["\047]?writable_roots["\047]?[ \t]*=/ ||
+section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\.[ \t]*["\047]?writable_roots["\047]?[ \t]*=/ {
+    coll = $0; roots(); next
+}
+section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\./ { swdotted = 1 }
+section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*=/ { swother = 1 }
+inset &&/^[ \t]*["\047]?(GIT_CONFIG_GLOBAL|GH_CONFIG_DIR)["\047]?[ \t]*=/ {
     # A multi-line value is not something this edits.
     if (opening != "") other = 1
     # Managed: the table gets these keys with this value, whatever it had.
@@ -82,6 +191,16 @@ inpolicy && /^[ \t]*["\047]?set["\047]?[ \t]*[.=]/ { other = 1 }
 /^[ \t]*["\047]?shell_environment_policy["\047]?[ \t]*[.=]/ { other = 1 }
 !skip { print }
 END {
+    if (incoll) { swother = rootsseen = 1; print coll }
+    endsection()
+    if (bean && !rootsseen && !added && !swtable && !swdotted && !swother) printf "\n[sandbox_workspace_write]\nwritable_roots = %s\n", beanroots
+    # Not editing it fails the apply where the Bean paths go in, or have to come out.
+    if (swfail || bean && swother) {
+        print "codex config: sandbox_workspace_write.writable_roots is in a form this script does not edit;" > "/dev/stderr"
+        print "  make it an array of one-line strings without escapes or comments inside, in a plain" > "/dev/stderr"
+        print "  [sandbox_workspace_write] table or as a top-level dotted key, then apply again" > "/dev/stderr"
+        exit 1
+    }
     if (!manage) exit
     if (other) {
         print "codex config: shell_environment_policy.set is in a form this script does not edit;" > "/dev/stderr"
@@ -108,12 +227,14 @@ url = "https://builds.mcp.cloudflare.com/mcp"
 url = "https://observability.mcp.cloudflare.com/mcp"
 TOML
 )
-# Never install a config Codex can't load or with the wrong agent environment:
-# the result must parse, hold both managed values when managing and neither
-# agent value otherwise, and equal the live config in everything else
-# (Cloudflare entries aside), or apply fails and leaves the live file as it
-# is. sync.sh's ssh shell may not have uv on PATH. Without uv the check is
-# required only where the agent environment is managed.
+# Never install a config Codex can't load or with the wrong agent environment
+# or writable roots: the result must parse, hold both managed values when
+# managing and neither agent value otherwise, hold the live writable_roots in
+# order with the Bean paths appended or removed, and equal the live config in
+# everything else (Cloudflare entries aside), or apply fails and leaves the live
+# file as it is. sync.sh's ssh shell may not have uv on PATH. Without uv the
+# check is required only where the agent environment or Bean's roots are
+# managed.
 uv=$(command -v uv || { for u in "$HOME/.local/bin/uv" /opt/homebrew/bin/uv; do [ -x "$u" ] && echo "$u" && break; done; } || true)
 if [ -n "$uv" ]; then
 tmp=$(mktemp -d)
@@ -122,7 +243,7 @@ printf '%s' "$live" > "$tmp/live.toml"
 printf '%s\n' "$out" > "$tmp/out.toml"
 "$uv" run --no-project python -I -c '
 import sys, tomllib
-live_path, out_path, gitconfig, ghconfig, manage = sys.argv[1:]
+live_path, out_path, gitconfig, ghconfig, manage, bean, *bean_roots = sys.argv[1:]
 managed = {"GIT_CONFIG_GLOBAL": gitconfig, "GH_CONFIG_DIR": ghconfig}
 cloudflare = {"cloudflare", "cloudflare-docs", "cloudflare-bindings", "cloudflare-builds", "cloudflare-observability"}
 
@@ -147,7 +268,14 @@ def unmanaged(config):
     config.pop("mcp_servers", None)
     if servers:
         config["mcp_servers"] = servers
+    sandbox = dict(config.pop("sandbox_workspace_write", {}))
+    sandbox.pop("writable_roots", None)
+    if sandbox:
+        config["sandbox_workspace_write"] = sandbox
     return config
+
+def roots(config):
+    return config.get("sandbox_workspace_write", {}).get("writable_roots", [])
 
 live, out = load(live_path, "the live config"), load(out_path, "the result")
 env = out.get("shell_environment_policy", {}).get("set", {})
@@ -155,10 +283,14 @@ if manage and any(env.get(k) != v for k, v in managed.items()):
     sys.exit("codex config: the result lacks the agent environment; not applied")
 if not manage and any(env.get(k) == v for k, v in managed.items()):
     sys.exit("codex config: the result still holds the agent environment; not applied")
+want = [r for r in roots(live) if bean or r not in bean_roots]
+want += [r for r in bean_roots if bean and r not in want]
+if roots(out) != want:
+    sys.exit("codex config: the result does not hold the expected writable_roots; not applied")
 if unmanaged(live) != unmanaged(out):
     sys.exit("codex config: the result changes more than the managed keys; not applied")
-' "$tmp/live.toml" "$tmp/out.toml" "$gitconfig" "$ghconfig" "$manage"
-elif [ -n "$manage" ]; then
+' "$tmp/live.toml" "$tmp/out.toml" "$gitconfig" "$ghconfig" "$manage" "$bean" "$beandata" "$beanconfig"
+elif [ -n "$manage$bean" ]; then
     echo "codex config: uv not found to check the result; not applied" >&2
     exit 1
 else
