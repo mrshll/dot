@@ -1,0 +1,11 @@
+#!/bin/sh
+# Deskflow on marshbox: a client of the Mac. This is the Flatpak's config
+# directory. The server address (client/remoteHost) is set once in the
+# Deskflow GUI and left alone here, so the Mac's name stays out of this repo.
+set -eu
+settings='core/coreMode=1
+core/computerName=marshbox
+gui/startCoreWithGui=true
+security/tlsEnabled=true
+security/checkPeerFingerprints=true'
+{{ template "deskflow-settings.sh" . }}

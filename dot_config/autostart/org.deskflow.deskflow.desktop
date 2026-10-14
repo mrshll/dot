@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Deskflow
+Comment=Keyboard and mouse from the Mac
+Exec=flatpak run org.deskflow.deskflow
+Icon=org.deskflow.deskflow
+Terminal=false
+X-GNOME-Autostart-enabled=true

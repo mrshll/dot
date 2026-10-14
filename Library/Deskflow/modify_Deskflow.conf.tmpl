@@ -1,0 +1,12 @@
+#!/bin/sh
+# Deskflow on the Mac: the server, sharing this keyboard and mouse with
+# marshbox. Screen layout is in deskflow-server.conf beside this file.
+set -eu
+settings='core/coreMode=2
+core/computerName=macbook
+gui/startCoreWithGui=true
+security/tlsEnabled=true
+security/checkPeerFingerprints=true
+server/externalConfig=true
+server/externalConfigFile={{ .chezmoi.homeDir }}/Library/Deskflow/deskflow-server.conf'
+{{ template "deskflow-settings.sh" . }}

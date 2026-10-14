@@ -42,6 +42,13 @@ Library
 .config/pytest-local
 {{ end }}
 
+# Deskflow: the Mac shares its keyboard and mouse as the server (under
+# Library/, already Mac-only); marshbox is the one client.
+{{ if ne .chezmoi.hostname "marshbox" }}
+.config/autostart
+.var
+{{ end }}
+
 # espanso hub packages are installed with `espanso install`, not tracked here
 .config/espanso/match/packages
 
