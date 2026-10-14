@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Regression test for the GitHub SSH->HTTPS rewrite in dot_gitconfig.tmpl.
+# Regression test for the GitHub SSH->HTTPS rewrite.
 #
-# serveserve holds no GitHub login of Marsh's, so its SSH remotes must go over
-# HTTPS, where gh's stored login (mrshll-agent) answers. Every other machine
-# keeps SSH remotes as they are.
+# Only agents' git (dot_config/git/agent.gitconfig.tmpl, their
+# GIT_CONFIG_GLOBAL on serveserve) sends SSH remotes over HTTPS, where gh's
+# agent login (GH_CONFIG_DIR=~/.config/gh-agent) answers. Marsh's own
+# ~/.gitconfig keeps SSH remotes on every machine, so his pushes use his key.
 #
 # Usage: tests/gitconfig_github_https_test.sh
 set -euo pipefail
@@ -16,13 +17,13 @@ failures=0
 fail() { printf 'FAIL: %s\n' "$*" >&2; failures=$((failures + 1)); }
 pass() { printf 'ok:   %s\n' "$*"; }
 
-# render OS IS_SERVER: path to ~/.gitconfig as rendered for that machine.
+# render TEMPLATE OS IS_SERVER: path to TEMPLATE as rendered for that machine.
 render() {
-    local cfg="$WORK/chezmoi-$1-$2.toml" out="$WORK/gitconfig-$1-$2"
-    printf '[data]\n  hostname = "test"\n  os = "%s"\n  is_server = %s\n  has_op = false\n' "$1" "$2" > "$cfg"
-    chezmoi execute-template --file "$REPO_DIR/dot_gitconfig.tmpl" \
+    local cfg="$WORK/chezmoi-$2-$3.toml" out="$WORK/$(basename "$1")-$2-$3"
+    printf '[data]\n  hostname = "test"\n  os = "%s"\n  is_server = %s\n  has_op = false\n' "$2" "$3" > "$cfg"
+    chezmoi execute-template --file "$REPO_DIR/$1" \
         --source "$REPO_DIR" --config "$cfg" \
-        --override-data "{\"chezmoi\":{\"os\":\"$1\"}}" > "$out"
+        --override-data "{\"chezmoi\":{\"os\":\"$2\"}}" > "$out"
     printf '%s' "$out"
 }
 
@@ -31,22 +32,24 @@ rewritten() {
     GIT_CONFIG_GLOBAL="$1" GIT_CONFIG_NOSYSTEM=1 git ls-remote --get-url "$2"
 }
 
-cfg=$(render linux true)
+cfg=$(render dot_config/git/agent.gitconfig.tmpl linux true)
 for url in git@github.com:mrshll/dot.git ssh://git@github.com/mrshll/dot.git; do
     got=$(rewritten "$cfg" "$url")
-    [ "$got" = https://github.com/mrshll/dot.git ] && pass "serveserve: $url goes over HTTPS" \
-        || fail "serveserve: $url became '$got'"
+    [ "$got" = https://github.com/mrshll/dot.git ] && pass "agents: $url goes over HTTPS" \
+        || fail "agents: $url became '$got'"
 done
 got=$(GIT_CONFIG_GLOBAL="$cfg" GIT_CONFIG_NOSYSTEM=1 git config --get-all credential.https://github.com.helper | tail -n1)
-[ "$got" = "!/usr/bin/gh auth git-credential" ] && pass "serveserve: HTTPS asks gh for the credential" \
-    || fail "serveserve: github.com helper is '$got'"
+[ "$got" = "!/usr/bin/gh auth git-credential" ] && pass "agents: HTTPS asks gh for the credential" \
+    || fail "agents: github.com helper is '$got'"
 
-for combo in "darwin false" "linux false"; do
+for combo in "linux true" "darwin false" "linux false"; do
     set -- $combo
-    cfg=$(render "$1" "$2")
-    got=$(rewritten "$cfg" git@github.com:mrshll/dot.git)
-    [ "$got" = git@github.com:mrshll/dot.git ] && pass "$1 (server=$2): SSH remotes untouched" \
-        || fail "$1 (server=$2): SSH remote became '$got'"
+    cfg=$(render dot_gitconfig.tmpl "$1" "$2")
+    for url in git@github.com:mrshll/dot.git ssh://git@github.com/mrshll/dot.git; do
+        got=$(rewritten "$cfg" "$url")
+        [ "$got" = "$url" ] && pass "Marsh, $1 (server=$2): $url untouched" \
+            || fail "Marsh, $1 (server=$2): $url became '$got'"
+    done
 done
 
 echo

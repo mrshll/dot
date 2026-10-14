@@ -74,19 +74,18 @@ in`, tell me to run `eval $(op signin)` — never try to supply that password
 yourself. Don't route around any of this with a service-account token.
 `passh doctor` diagnoses the link.
 
-GitHub on serveserve: the only stored login is my machine account,
-mrshll-agent, in gh's config, so plain `gh` and git (SSH remotes are rewritten
-to HTTPS) act as it with no passh. Run `gh` and `git push` through `agent-gh`
-anyway (`agent-gh gh pr create`, `agent-gh git push`): it pins mrshll-agent
-over any GH_TOKEN or GITHUB_TOKEN it inherits and over a checkout's own
-credential helper. Your commands run with
-`GIT_CONFIG_GLOBAL=~/.config/git/agent.gitconfig`, so commits author and sign
-as mrshll-agent by default; `agent-gh --setup` also pins that per checkout,
-over any identity the checkout sets itself. Leave the variable alone. My own
-account (mrshll) has no credential stored on serveserve: `mgh` (`mgh pr merge
-12`, `mgh git push`) injects my token from 1Password through passh for one
-command. Use it only when I ask, and never store my login (`gh auth login`, a
-token file, an SSH key) — tell me instead.
+GitHub on serveserve: your commands run with
+`GH_CONFIG_DIR=~/.config/gh-agent` and
+`GIT_CONFIG_GLOBAL=~/.config/git/agent.gitconfig`, so plain `gh`, `git push`
+(SSH remotes go over HTTPS) and your commits act, author and sign as my machine
+account, mrshll-agent, with no passh. Leave both variables alone. `agent-gh`
+(`agent-gh gh pr create`, `agent-gh git push`) still works, and also pins
+mrshll-agent over any GH_TOKEN or GITHUB_TOKEN it inherits and over a
+checkout's own credential helper; `agent-gh --setup` pins the commit identity
+per checkout, over any the checkout sets itself. My own login (mrshll) is in
+`~/.config/gh` for my shells: never point gh or git at it, read it, or act as
+me with it, and never store a login (`gh auth login`, a token file, an SSH
+key) — tell me instead.
 
 ## Infrastructure
 

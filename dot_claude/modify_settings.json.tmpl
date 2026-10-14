@@ -97,11 +97,15 @@ enforced='{
   }
 }'
 
-# serveserve: Claude Code's commands run git as mrshll-agent, authoring and
-# signing with its key (dot_config/git/agent.gitconfig.tmpl). Marsh's own
-# shells keep ~/.gitconfig.
+# serveserve: Claude Code's commands run gh and git as mrshll-agent: gh reads
+# the agents' config (agent-gh --seed), and git authors and signs with its key
+# and pushes over HTTPS with that login (dot_config/git/agent.gitconfig.tmpl).
+# Marsh's own shells keep ~/.config/gh and ~/.gitconfig.
 {{ if .is_server -}}
-env_enforced='{ "GIT_CONFIG_GLOBAL": {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }} }'
+env_enforced='{
+  "GIT_CONFIG_GLOBAL": {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }},
+  "GH_CONFIG_DIR": {{ joinPath .chezmoi.homeDir ".config/gh-agent" | quote }}
+}'
 {{- else -}}
 env_enforced='{}'
 {{- end }}

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Regression test: on serveserve, git run by an agent (Claude Code, Codex)
-# authors and signs as mrshll-agent, while Marsh's own shells keep him.
+# Regression test: on serveserve, gh and git run by an agent (Claude Code,
+# Codex) act, author and sign as mrshll-agent, while Marsh's own shells keep him.
 #
-# The split is GIT_CONFIG_GLOBAL=~/.config/git/agent.gitconfig, which the
-# Claude Code settings and Codex config put in the environment of the commands
-# those agents run, on serveserve only. Renders the modify scripts and both
+# The split is GIT_CONFIG_GLOBAL=~/.config/git/agent.gitconfig and
+# GH_CONFIG_DIR=~/.config/gh-agent, which the Claude Code settings and Codex
+# config put in the environment of the commands those agents run, on
+# serveserve only. Renders the modify scripts and both
 # gitconfigs into a throwaway directory; nothing touches the real home.
 #
 # Usage: tests/agent_git_identity_test.sh
@@ -14,6 +15,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 AGENT_CONFIG="$HOME/.config/git/agent.gitconfig"
+AGENT_GH="$HOME/.config/gh-agent"
 
 failures=0
 fail() { printf 'FAIL: %s\n' "$*" >&2; failures=$((failures + 1)); }
@@ -35,11 +37,13 @@ live='{"theme":"dark","env":{"KEPT":"1"}}'
 out=$(bash "$WORK/claude-true.sh" <<<"$live")
 check "claude, serveserve: commands get the agent gitconfig" \
     '[ "$(jq -r .env.GIT_CONFIG_GLOBAL <<<"$out")" = "$AGENT_CONFIG" ]'
+check "claude, serveserve: commands get the agents' gh config" \
+    '[ "$(jq -r .env.GH_CONFIG_DIR <<<"$out")" = "$AGENT_GH" ]'
 check "claude, serveserve: env set by hand survives" '[ "$(jq -r .env.KEPT <<<"$out")" = 1 ]'
 check "claude, serveserve: other live settings survive" '[ "$(jq -r .theme <<<"$out")" = dark ]'
 out=$(bash "$WORK/claude-true.sh" </dev/null)
 check "claude, serveserve: a fresh machine gets it too" \
-    '[ "$(jq -c .env <<<"$out")" = "{\"GIT_CONFIG_GLOBAL\":\"$AGENT_CONFIG\"}" ]'
+    '[ "$(jq -cS .env <<<"$out")" = "{\"GH_CONFIG_DIR\":\"$AGENT_GH\",\"GIT_CONFIG_GLOBAL\":\"$AGENT_CONFIG\"}" ]'
 out=$(bash "$WORK/claude-false.sh" <<<"$live")
 check "claude, elsewhere: no agent gitconfig, env untouched" '[ "$(jq -c .env <<<"$out")" = "{\"KEPT\":\"1\"}" ]'
 
@@ -48,7 +52,7 @@ for server in true false; do render dot_codex/modify_private_config.toml.tmpl "$
 # Live configs, each valid TOML, holding an unrelated KEPT variable in a
 # different spelling of shell_environment_policy.set.
 mkdir -p "$WORK/live"
-printf 'model = "kept"\n\n[shell_environment_policy.set]\nKEPT = "yes"\nGIT_CONFIG_GLOBAL = "/somewhere/else"\n\n[mcp_servers.other]\nurl = "https://example.com/mcp"\n' > "$WORK/live/table.toml"
+printf 'model = "kept"\n\n[shell_environment_policy.set]\nKEPT = "yes"\nGIT_CONFIG_GLOBAL = "/somewhere/else"\nGH_CONFIG_DIR = "/home/x/.config/gh"\n\n[mcp_servers.other]\nurl = "https://example.com/mcp"\n' > "$WORK/live/table.toml"
 printf 'model = "kept"\n\n  [shell_environment_policy.set]  # indented\n  KEPT = "yes"\n' > "$WORK/live/indented.toml"
 printf 'model = "kept"\n\n[shell_environment_policy]\ninherit = "core"\nset = { KEPT = "yes" }\n' > "$WORK/live/inline.toml"
 printf 'model = "kept"\n\n[shell_environment_policy]\nset.KEPT = "yes"\n' > "$WORK/live/dotted.toml"
@@ -66,9 +70,10 @@ for live in "$WORK"/live/*.toml; do
         want=$(json "$live")
         case "$server-$name" in
             true-table|true-indented|true-none)
-                want=$(jq -cS --arg g "$AGENT_CONFIG" '.shell_environment_policy.set.GIT_CONFIG_GLOBAL = $g' <<<"$want") ;;
+                want=$(jq -cS --arg g "$AGENT_CONFIG" --arg h "$AGENT_GH" \
+                    '.shell_environment_policy.set.GIT_CONFIG_GLOBAL = $g | .shell_environment_policy.set.GH_CONFIG_DIR = $h' <<<"$want") ;;
             true-*)
-                grep -q "GIT_CONFIG_GLOBAL not set" "$WORK/err-$name-$server" \
+                grep -q "GIT_CONFIG_GLOBAL and GH_CONFIG_DIR not set" "$WORK/err-$name-$server" \
                     && pass "codex ($name): a form it does not edit is left alone, with a warning" \
                     || fail "codex ($name): no warning for a form it does not edit" ;;
         esac

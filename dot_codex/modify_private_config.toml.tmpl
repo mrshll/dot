@@ -1,12 +1,14 @@
 #!/bin/sh
 # Preserve Codex-managed local state; manage only Cloudflare MCP entries and,
-# on serveserve, the git identity of the commands Codex runs.
+# on serveserve, the GitHub identity of the commands Codex runs.
 set -eu
 {{ if .is_server -}}
-# serveserve: Codex's commands run git as mrshll-agent, authoring and signing
-# with its key (dot_config/git/agent.gitconfig.tmpl). Marsh's own shells keep
-# ~/.gitconfig. Only this one key of shell_environment_policy.set is managed.
-managed='GIT_CONFIG_GLOBAL = {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}'
+# serveserve: Codex's commands run gh and git as mrshll-agent: gh reads the
+# agents' config (agent-gh --seed), and git authors and signs with its key and
+# pushes over HTTPS with that login (dot_config/git/agent.gitconfig.tmpl).
+# Marsh's own shells keep ~/.config/gh and ~/.gitconfig. Only these keys of
+# shell_environment_policy.set are managed; awk -v turns \n into newlines.
+managed='GIT_CONFIG_GLOBAL = {{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}\nGH_CONFIG_DIR = {{ joinPath .chezmoi.homeDir ".config/gh-agent" | quote }}'
 {{- else -}}
 managed=
 {{- end }}
@@ -19,8 +21,8 @@ awk -v managed="$managed" '
     if ($0 ~ /shell_environment_policy/ && !inset && !inpolicy) other = 1
     if (inset && managed != "") { print; print managed; done = 1; next }
 }
-# The managed key replaces whatever value the table had for it.
-inset && managed != "" && /^[ \t]*"?GIT_CONFIG_GLOBAL"?[ \t]*=/ { next }
+# The managed keys replace whatever values the table had for them.
+inset && managed != "" && /^[ \t]*"?(GIT_CONFIG_GLOBAL|GH_CONFIG_DIR)"?[ \t]*=/ { next }
 # set as an inline table or dotted keys: valid TOML this script does not edit.
 inpolicy && /^[ \t]*"?set"?[ \t]*[.=]/ { other = 1 }
 /^[ \t]*"?shell_environment_policy"?[ \t]*\./ { other = 1 }
@@ -28,7 +30,7 @@ inpolicy && /^[ \t]*"?set"?[ \t]*[.=]/ { other = 1 }
 END {
     if (managed == "" || done) exit
     if (other) {
-        print "codex config: shell_environment_policy.set is in a form this script does not edit; GIT_CONFIG_GLOBAL not set" > "/dev/stderr"
+        print "codex config: shell_environment_policy.set is in a form this script does not edit; GIT_CONFIG_GLOBAL and GH_CONFIG_DIR not set" > "/dev/stderr"
         exit
     }
     printf "\n[shell_environment_policy.set]\n%s\n", managed

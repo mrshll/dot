@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Regression test for the GitHub identity wrappers in private_dot_local/bin.
+# Regression test for agent-gh (private_dot_local/bin).
 #
-# mrshll-agent is the ambient identity on serveserve: agent-gh uses its token
-# from gh's own store without passh, and falls back to passh only when that
-# token is missing. Acting as Marsh (mgh) always goes through passh. Neither
-# hands a command another account's login, and git authenticates with the
-# wrapper's token whatever credential helper a checkout configures.
+# agent-gh uses mrshll-agent's token from the agents' gh config
+# (~/.config/gh-agent) without passh, and falls back to passh only when that
+# token is missing. It never hands a command Marsh's login from ~/.config/gh,
+# and git authenticates with its token whatever credential helper a checkout
+# configures.
 #
 # Runs the scripts against stub gh and passh in a throwaway HOME; no network,
 # no 1Password, nothing touches the real gh config.
@@ -15,7 +15,6 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 AGENT_GH="$REPO_DIR/private_dot_local/bin/executable_agent-gh"
-MGH="$REPO_DIR/private_dot_local/bin/executable_mgh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -66,7 +65,7 @@ EOF
 # probe: what a wrapped command sees.
 cat > "$WORK/bin/probe" <<'EOF'
 #!/usr/bin/env bash
-printf 'GH_TOKEN=%s\nGITHUB_TOKEN=%s\nPASSH_NO_FALLBACK=%s\n' "${GH_TOKEN-}" "${GITHUB_TOKEN-}" "${PASSH_NO_FALLBACK-}"
+printf 'GH_TOKEN=%s\nGITHUB_TOKEN=%s\nPASSH_NO_FALLBACK=%s\nGH_CONFIG_DIR=%s\n' "${GH_TOKEN-}" "${GITHUB_TOKEN-}" "${PASSH_NO_FALLBACK-}" "${GH_CONFIG_DIR-}"
 git config --get-all url.https://github.com/.insteadOf || true
 EOF
 # A checkout-level helper that would answer with some other account.
@@ -120,8 +119,10 @@ check "agent-gh: looks the token up by user, never the active account" \
     'grep -q "^auth token --hostname github.com --user mrshll-agent|" "$WORK/gh.log" && ! grep -q "marsh" <<<"$out"'
 
 out=$(run env GH_TOKEN=marsh-inherited GITHUB_TOKEN=marsh-too GH_CONFIG_DIR="$WORK/elsewhere" bash "$AGENT_GH" probe)
-check "agent-gh: looks in the config --seed wrote, whatever GH_CONFIG_DIR is inherited" \
-    '[ "$(head -n1 "$WORK/gh-env.log")" = "GH_HOST= GH_CONFIG_DIR=$WORK/home/.config/gh" ]'
+check "agent-gh: looks in the agents' config --seed wrote, whatever GH_CONFIG_DIR is inherited" \
+    '[ "$(head -n1 "$WORK/gh-env.log")" = "GH_HOST= GH_CONFIG_DIR=$WORK/home/.config/gh-agent" ]'
+check "agent-gh: the command gets the agents' gh config, not Marsh's" \
+    'grep -qx "GH_CONFIG_DIR=$WORK/home/.config/gh-agent" <<<"$out"'
 check "agent-gh: an inherited GH_TOKEN is neither used nor passed on" \
     'grep -qx "GH_TOKEN=agent-stored-token" <<<"$out" && grep -q "|GH_TOKEN=$" "$WORK/gh.log"'
 check "agent-gh: an inherited GITHUB_TOKEN is dropped" 'grep -qx "GITHUB_TOKEN=" <<<"$out"'
@@ -141,13 +142,18 @@ check "agent-gh: command gets the passh-resolved agent token" \
 out=$(run env PATH="$WORK/emptybin:$WORK/bin:/usr/bin:/bin" bash "$AGENT_GH" probe 2>/dev/null) && rc=0 || rc=$?
 check "agent-gh: an empty token from passh fails rather than running the command" \
     '[ "$rc" -ne 0 ] && ! grep -q "^GH_TOKEN=" <<<"$out"'
+out=$(run env GH_CONFIG_DIR="$WORK/elsewhere" bash "$AGENT_GH" probe)
+check "agent-gh: passh's command gets the agents' gh config too" \
+    'grep -qx "GH_CONFIG_DIR=$WORK/home/.config/gh-agent" <<<"$out"'
 
 # --- agent-gh --seed ---------------------------------------------------------
 rm -f "$WORK/login-stdin" "$WORK/stored"
 run env GH_HOST=ghe.example.com GH_CONFIG_DIR="$WORK/elsewhere" bash "$AGENT_GH" --seed >/dev/null 2>&1 && seeded=0 || seeded=$?
 check "agent-gh --seed: succeeds" '[ "$seeded" -eq 0 ]'
-check "agent-gh --seed: github.com and gh's default config, whatever was inherited" \
-    '[ "$(sort -u "$WORK/gh-env.log")" = "GH_HOST= GH_CONFIG_DIR=$WORK/home/.config/gh" ]'
+check "agent-gh --seed: github.com and the agents' gh config, whatever was inherited" \
+    '[ "$(sort -u "$WORK/gh-env.log")" = "GH_HOST= GH_CONFIG_DIR=$WORK/home/.config/gh-agent" ]'
+check "agent-gh --seed: the agents' config dir is private" \
+    '[ "$(stat -c %a "$WORK/home/.config/gh-agent")" = 700 ]'
 check "agent-gh --seed: checks whose token it is before storing it" \
     'grep -q "^api --hostname github.com user --jq .login|GH_TOKEN=resolved:op://Private/Github agent/Token$" "$WORK/gh.log"'
 check "agent-gh --seed: one passh call for the agent item, not as GH_TOKEN" \
@@ -160,23 +166,6 @@ run bash "$AGENT_GH" --seed >/dev/null 2>&1 && seeded=0 || seeded=$?
 check "agent-gh --seed: refuses a token that is not mrshll-agent's, storing nothing" \
     '[ "$seeded" -ne 0 ] && ! grep -q "^auth login" "$WORK/gh.log"'
 rm -f "$WORK/login-as"
-
-# --- mgh ---------------------------------------------------------------------
-touch "$WORK/stored"
-out=$(run bash "$MGH" pr list)
-check "mgh: gh as Marsh, token from passh, never the agent's" \
-    'grep -q "^GH_TOKEN=op://" "$WORK/passh.log" && ! grep -q "Github agent" "$WORK/passh.log" && grep -q "^gh-ran pr list GH_TOKEN=resolved:op://" <<<"$out"'
-out=$(run env GH_TOKEN=agent-stored-token bash "$MGH" git config --get-all url.https://github.com/.insteadOf)
-check "mgh git: token from passh" 'grep -q "^GH_TOKEN=op://" "$WORK/passh.log"'
-check "mgh git: SSH remotes go over HTTPS" 'grep -qx "git@github.com:" <<<"$out"'
-got=$(credential bash "$MGH")
-check "mgh git: pushes with Marsh's injected token, not a checkout's own helper" \
-    '[ "$got" = "resolved:$(sed -n "s/^MARSH_TOKEN_REF=.\(.*\).$/\1/p" "$MGH")" ]'
-out=$(run env PATH="$WORK/emptybin:$WORK/bin:/usr/bin:/bin" bash "$MGH" pr list 2>/dev/null) && rc=0 || rc=$?
-check "mgh: an empty token fails rather than falling back to the stored agent login" \
-    '[ "$rc" -ne 0 ] && ! grep -q "^gh-ran" <<<"$out"'
-run bash "$MGH" >/dev/null 2>&1 && rc=0 || rc=$?
-check "mgh: no arguments is a usage error" '[ "$rc" -eq 64 ] && [ ! -e "$WORK/passh.log" ]'
 
 echo
 [ "$failures" -eq 0 ] && echo "all passed" || { echo "$failures failure(s)" >&2; exit 1; }

@@ -27,7 +27,8 @@
 	smudge = git-lfs smudge -- %f
 	process = git-lfs filter-process
 	required = true
-{{/* gh hands git its stored login, mrshll-agent (agent-gh --seed). */ -}}
+{{/* gh hands git the agents' login, mrshll-agent: agent sessions on serveserve
+     also get GH_CONFIG_DIR=~/.config/gh-agent (agent-gh --seed). */ -}}
 [credential "https://github.com"]
 	helper =
 	helper = !{{ $gh }} auth git-credential
@@ -35,7 +36,8 @@
 	helper =
 	helper = !{{ $gh }} auth git-credential
 {{/* An SSH remote would push with Marsh's own key, as mrshll. Over HTTPS the
-     credential helper hands git the agent's GH_TOKEN instead. */ -}}
+     credential helper hands git the agent's login instead. Only agents get
+     this rewrite; Marsh's ~/.gitconfig keeps SSH remotes. */ -}}
 [url "https://github.com/"]
 	insteadOf = git@github.com:
 	insteadOf = ssh://git@github.com/
