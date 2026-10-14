@@ -61,10 +61,14 @@ done
 has() { grep -qx "$2" "$WORK/managed-$1.txt"; }
 under() { grep -E "^$2(/|$)" "$WORK/managed-$1.txt" || true; }
 
-for target in Library/Deskflow/Deskflow.conf Library/Deskflow/deskflow-server.conf \
-    Library/LaunchAgents/com.marsh.deskflow.plist; do
+for target in Library/Deskflow/Deskflow.conf Library/Deskflow/deskflow-server.conf; do
     has mac "$target" && pass "mac: manages $target" || fail "mac: does not manage $target"
 done
+# Deskflow starts on the Mac only by hand, so it never comes up at login on
+# whatever network the Mac is on.
+got=$(grep -i deskflow "$WORK/managed-mac.txt" | grep -Ev '^Library/Deskflow(/|$)' || true)
+[ -z "$got" ] && pass "mac: nothing starts Deskflow at login" \
+    || fail "mac: manages $(tr '\n' ' ' <<< "$got")"
 for dir in .var .config/autostart; do
     got=$(under mac "$dir")
     [ -z "$got" ] && pass "mac: nothing under $dir" || fail "mac: manages $(tr '\n' ' ' <<< "$got")"
@@ -87,15 +91,13 @@ done
 # The runbook's first apply, into fresh homes: only the directories it tells
 # you to create exist beforehand, and only its targets are applied.
 runbook="$WORK/runbook-mac"
-mkdir -p "$runbook/Library/LaunchAgents"
-if chez apply mac "$runbook" "$runbook/Library/Deskflow" \
-    "$runbook/Library/LaunchAgents/com.marsh.deskflow.plist" > "$WORK/out" 2>&1; then
+mkdir -p "$runbook/Library"
+if chez apply mac "$runbook" "$runbook/Library/Deskflow" > "$WORK/out" 2>&1; then
     missing=
-    for f in Library/Deskflow/Deskflow.conf Library/Deskflow/deskflow-server.conf \
-        Library/LaunchAgents/com.marsh.deskflow.plist; do
+    for f in Library/Deskflow/Deskflow.conf Library/Deskflow/deskflow-server.conf; do
         [ -s "$runbook/$f" ] || missing+="$f "
     done
-    [ -z "$missing" ] && pass "runbook (mac): apply creates Deskflow.conf, the layout and the plist" \
+    [ -z "$missing" ] && pass "runbook (mac): apply creates Deskflow.conf and the layout" \
         || fail "runbook (mac): apply succeeded but missing $missing"
 else
     fail "runbook (mac): apply failed: $(tr '\n' ';' < "$WORK/out")"
@@ -441,19 +443,7 @@ while read -r from dir to; do
         || fail "layout: $from $dir $to has no $to $opp $from"
 done <<< "$links"
 
-# --- 4. starting at login ----------------------------------------------------
-
-plist_check=$(uv run --no-project python -c '
-import plistlib, sys
-p = plistlib.load(open(sys.argv[1], "rb"))
-assert p["ProgramArguments"] == ["/usr/bin/open", "-a", "/Applications/Deskflow.app"], p["ProgramArguments"]
-assert p["RunAtLoad"] is True, p.get("RunAtLoad")
-assert "KeepAlive" not in p, p["KeepAlive"]
-assert p["Label"] == "com.marsh.deskflow", p["Label"]
-print("ok")
-' "$REPO_DIR/Library/LaunchAgents/com.marsh.deskflow.plist" 2>&1) || true
-[ "$plist_check" = ok ] && pass "plist: opens Deskflow.app at load, no KeepAlive" \
-    || fail "plist: $plist_check"
+# --- 4. starting at login (marshbox only) ------------------------------------
 
 exec_line=$(grep '^Exec=' "$REPO_DIR/dot_config/autostart/org.deskflow.deskflow.desktop")
 [ "$exec_line" = "Exec=flatpak run org.deskflow.deskflow" ] && pass "autostart: runs the flatpak" \
