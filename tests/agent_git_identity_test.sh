@@ -62,6 +62,9 @@ printf 'model = "kept"\n\n[shell_environment_policy.set]\nKEPT = "yes"\nGIT_CONF
 printf 'model = "kept"\n\n  [shell_environment_policy.set]  # indented\n  KEPT = "yes"\n' > "$WORK/live/indented.toml"
 printf "model = 'kept'\n\n[shell_environment_policy.set]\nKEPT = 'yes'\n'GH_CONFIG_DIR' = '/old'\n\"GIT_CONFIG_GLOBAL\" = '/old'\n" > "$WORK/live/literal-keys.toml"
 printf 'model = "kept"\n' > "$WORK/live/none.toml"
+# A table header inside a multi-line string is text, not a table.
+printf 'developer_instructions = """\nExample configuration:\n[shell_environment_policy.set]\nEXAMPLE = "sample"\n"""\nmodel = "kept"\n' > "$WORK/live/in-string.toml"
+printf "notes = '''\n[shell_environment_policy.set]\n'''\n\n[shell_environment_policy.set]\nKEPT = 'yes'\n" > "$WORK/live/in-literal-string.toml"
 # Forms the script does not edit: on serveserve, apply must fail rather than
 # install a broken config or one without the agent identity.
 printf 'model = "kept"\n\n[shell_environment_policy]\ninherit = "core"\nset = { KEPT = "yes" }\n' > "$WORK/live/inline.toml"
@@ -103,7 +106,7 @@ done
 # A live config that is already broken is not made worse or installed.
 printf 'model = "kept"\nmodel = "twice"\n' | sh "$WORK/codex-true.sh" >/dev/null 2>"$WORK/err-broken" && rc=0 || rc=$?
 check "codex, serveserve: a result that does not parse fails the apply" \
-    '[ "$rc" -ne 0 ] && grep -q "would not be valid TOML" "$WORK/err-broken"'
+    '[ "$rc" -ne 0 ] && grep -q "not valid TOML" "$WORK/err-broken"'
 # Rolling back (or any other machine): the keys this set are removed; the same
 # keys holding something else, and everything else, stay.
 sh "$WORK/codex-true.sh" < "$WORK/live/table.toml" | sh "$WORK/codex-false.sh" > "$WORK/rolled.toml"
@@ -111,6 +114,9 @@ check "codex, rolled back: the agent values are removed, everything else stays" 
     '[ "$(json "$WORK/rolled.toml")" = "$(json "$WORK/live/table.toml" | jq -cS "del(.shell_environment_policy.set.GIT_CONFIG_GLOBAL, .shell_environment_policy.set.GH_CONFIG_DIR)")" ]'
 printf '[shell_environment_policy.set]\nGH_CONFIG_DIR = "/mine"\n' | sh "$WORK/codex-false.sh" > "$WORK/mine.toml"
 check "codex, elsewhere: a GH_CONFIG_DIR set by hand stays" '[ "$(json "$WORK/mine.toml" | jq -r .shell_environment_policy.set.GH_CONFIG_DIR)" = /mine ]'
+printf '[shell_environment_policy.set]\nGH_CONFIG_DIR = "/mine" # was "%s"\nGIT_CONFIG_GLOBAL = "%s"\n' "$AGENT_GH" "$AGENT_GH" | sh "$WORK/codex-false.sh" > "$WORK/mine.toml"
+check "codex, elsewhere: only a key holding its own agent value goes, not one whose comment names it" \
+    '[ "$(json "$WORK/mine.toml" | jq -c .shell_environment_policy.set)" = "{\"GH_CONFIG_DIR\":\"/mine\",\"GIT_CONFIG_GLOBAL\":\"$AGENT_GH\"}" ]'
 
 # --- what git does with it ---------------------------------------------------
 render dot_config/git/agent.gitconfig.tmpl true > "$WORK/agent.gitconfig"

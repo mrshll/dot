@@ -8,7 +8,7 @@ set -eu
 # Marsh's own shells keep ~/.config/gh and ~/.gitconfig. Only these two keys of
 # a plain [shell_environment_policy.set] table are managed. Everywhere else,
 # and to roll back (make the condition false), they are removed where they
-# still hold these values: nothing but this script puts them there.
+# still hold exactly these values: nothing but this script puts them there.
 gitconfig={{ joinPath .chezmoi.homeDir ".config/git/agent.gitconfig" | quote }}
 ghconfig={{ joinPath .chezmoi.homeDir ".config/gh-agent" | quote }}
 {{ if .is_server -}}
@@ -16,8 +16,36 @@ manage=1
 {{- else -}}
 manage=
 {{- end }}
-out=$(awk -v manage="$manage" -v gitconfig="$gitconfig" -v ghconfig="$ghconfig" '
+live=$(cat)
+out=$(printf '%s' "$live" | awk -v manage="$manage" -v gitconfig="$gitconfig" -v ghconfig="$ghconfig" '
+function count(s, d,   n, i) {
+    n = 0
+    while ((i = index(s, d)) > 0) { n++; s = substr(s, i + length(d)) }
+    return n
+}
+# holds(KEY, PATH): this line sets KEY to exactly PATH, quoted, then at most a comment.
+function holds(key, path,   rest, q, n) {
+    if ($0 !~ ("^[ \t]*[\"\047]?" key "[\"\047]?[ \t]*=")) return 0
+    rest = $0; sub(/^[^=]*=[ \t]*/, "", rest)
+    n = length(path) + 2
+    for (q = 1; q <= 2; q++) {
+        if (substr(rest, 1, n) == (q == 1 ? "\"" path "\"" : "\047" path "\047") &&
+            substr(rest, n + 1) ~ /^[ \t]*(#.*)?$/) return 1
+    }
+    return 0
+}
 BEGIN { if (manage) managed = "GIT_CONFIG_GLOBAL = \"" gitconfig "\"\nGH_CONFIG_DIR = \"" ghconfig "\"" }
+# Inside a multi-line string: copy it as it is, whatever it looks like.
+instr != "" {
+    if (count($0, instr) % 2) instr = ""
+    if (!skip) print
+    next
+}
+{
+    opening = ""
+    if (count($0, "\"\"\"") % 2) opening = "\"\"\""
+    else if (count($0, "\047\047\047") % 2) opening = "\047\047\047"
+}
 /^[ \t]*\[/ {
     skip = ($0 ~ /^\[mcp_servers\.(cloudflare|cloudflare-docs|cloudflare-bindings|cloudflare-builds|cloudflare-observability)(\]|\.)/)
     inset = ($0 ~ /^[ \t]*\[[ \t]*shell_environment_policy[ \t]*\.[ \t]*set[ \t]*\][ \t]*(#.*)?$/)
@@ -28,17 +56,17 @@ BEGIN { if (manage) managed = "GIT_CONFIG_GLOBAL = \"" gitconfig "\"\nGH_CONFIG_
 }
 inset && /^[ \t]*["\047]?(GIT_CONFIG_GLOBAL|GH_CONFIG_DIR)["\047]?[ \t]*=/ {
     # A multi-line value is not something this edits.
-    if ($0 ~ /("""|\047\047\047)/) other = 1
+    if (opening != "") other = 1
     # Managed: the table gets these keys with this value, whatever it had.
     if (manage) next
     # Not managed: drop them where they still hold the value set here.
-    if (index($0, "\"" gitconfig "\"") || index($0, "\047" gitconfig "\047") ||
-        index($0, "\"" ghconfig "\"") || index($0, "\047" ghconfig "\047")) next
+    if (holds("GIT_CONFIG_GLOBAL", gitconfig) || holds("GH_CONFIG_DIR", ghconfig)) next
 }
 # set as an inline table or dotted keys, at the root or in the policy table.
 inpolicy && /^[ \t]*["\047]?set["\047]?[ \t]*[.=]/ { other = 1 }
 /^[ \t]*["\047]?shell_environment_policy["\047]?[ \t]*[.=]/ { other = 1 }
 !skip { print }
+{ instr = opening }
 END {
     if (!manage) exit
     if (other) {
@@ -67,16 +95,50 @@ url = "https://observability.mcp.cloudflare.com/mcp"
 TOML
 )
 {{- if .is_server }}
-# Never install a config Codex can't load: if the result doesn't parse, apply
-# fails and leaves the live file as it is. sync.sh's ssh shell may not have
-# uv on PATH.
+# Never install a config Codex can't load or that lacks the agent environment:
+# the result must parse, hold both managed values, and otherwise equal the
+# live config (Cloudflare entries aside), or apply fails and leaves the live
+# file as it is. sync.sh's ssh shell may not have uv on PATH.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+printf '%s' "$live" > "$tmp/live.toml"
+printf '%s\n' "$out" > "$tmp/out.toml"
 uv=$(command -v uv || echo "$HOME/.local/bin/uv")
-printf '%s\n' "$out" | "$uv" run --no-project python -I -c '
+"$uv" run --no-project python -I -c '
 import sys, tomllib
-try:
-    tomllib.loads(sys.stdin.read())
-except tomllib.TOMLDecodeError as e:
-    sys.exit(f"codex config: the result would not be valid TOML ({e}); not applied")
-'
+live_path, out_path, gitconfig, ghconfig = sys.argv[1:]
+managed = {"GIT_CONFIG_GLOBAL": gitconfig, "GH_CONFIG_DIR": ghconfig}
+cloudflare = {"cloudflare", "cloudflare-docs", "cloudflare-bindings", "cloudflare-builds", "cloudflare-observability"}
+
+def load(path, what):
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        sys.exit(f"codex config: {what} is not valid TOML ({e}); not applied")
+
+def unmanaged(config):
+    config = dict(config)
+    policy = dict(config.get("shell_environment_policy", {}))
+    env = {k: v for k, v in policy.get("set", {}).items() if k not in managed}
+    policy.pop("set", None)
+    if env:
+        policy["set"] = env
+    config.pop("shell_environment_policy", None)
+    if policy:
+        config["shell_environment_policy"] = policy
+    servers = {k: v for k, v in config.get("mcp_servers", {}).items() if k not in cloudflare}
+    config.pop("mcp_servers", None)
+    if servers:
+        config["mcp_servers"] = servers
+    return config
+
+live, out = load(live_path, "the live config"), load(out_path, "the result")
+env = out.get("shell_environment_policy", {}).get("set", {})
+if any(env.get(k) != v for k, v in managed.items()):
+    sys.exit("codex config: the result lacks the agent environment; not applied")
+if unmanaged(live) != unmanaged(out):
+    sys.exit("codex config: the result changes more than the managed keys; not applied")
+' "$tmp/live.toml" "$tmp/out.toml" "$gitconfig" "$ghconfig"
 {{- end }}
 printf '%s\n' "$out"
