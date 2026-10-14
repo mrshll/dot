@@ -4,7 +4,8 @@
 #
 # The Codex config modifier appends both paths to
 # sandbox_workspace_write.writable_roots after what the live list holds, in
-# whichever spelling it uses, and removes them everywhere else and on rollback.
+# whichever spelling it uses, and removes them on rollback. Other machines'
+# lists are left as they are.
 # Renders the modifier into a throwaway directory; nothing touches the real home.
 #
 # Usage: tests/codex_bean_roots_test.sh
@@ -144,19 +145,20 @@ for live in "$WORK"/live/*.toml; do
     sh "$WORK/server.sh" < "$WORK/server-$name.toml" > "$WORK/again.toml" 2>/dev/null
     cmp -s "$WORK/server-$name.toml" "$WORK/again.toml" && pass "$name, serveserve: applying again changes nothing" \
         || fail "$name, serveserve: applying again changes it"
-    for undo in elsewhere rollback; do
-        sh "$WORK/$undo.sh" < "$WORK/server-$name.toml" > "$WORK/undone.toml" 2>"$WORK/err" && rc=0 || rc=$?
-        if [ "$name" = both-commented ]; then
-            # Bean's paths sit in an array with a comment: removing them would drop it.
-            [ "$rc" -ne 0 ] && grep -q "form this script does not edit" "$WORK/err" && [ ! -s "$WORK/undone.toml" ] \
-                && pass "$name, $undo: removing them from a commented array fails the apply, with the reason" \
-                || fail "$name, $undo: rc=$rc for a commented array"
-            continue
-        fi
+    sh "$WORK/rollback.sh" < "$WORK/server-$name.toml" > "$WORK/undone.toml" 2>"$WORK/err" && rc=0 || rc=$?
+    if [ "$name" = both-commented ]; then
+        # Bean's paths sit in an array with a comment: removing them would drop it.
+        [ "$rc" -ne 0 ] && grep -q "form this script does not edit" "$WORK/err" && [ ! -s "$WORK/undone.toml" ] \
+            && pass "$name, rollback: removing them from a commented array fails the apply, with the reason" \
+            || fail "$name, rollback: rc=$rc for a commented array"
+    else
         [ "$rc" -eq 0 ] && [ "$(json "$WORK/undone.toml")" = "$(json "$live" | without_bean)" ] \
-            && pass "$name, $undo: Bean's paths removed, the rest of the roots stay in order" \
-            || fail "$name, $undo: rc=$rc, got $(json "$WORK/undone.toml" 2>&1), want $(json "$live" | without_bean)"
-    done
+            && pass "$name, rollback: Bean's paths removed, the rest of the roots stay in order" \
+            || fail "$name, rollback: rc=$rc, got $(json "$WORK/undone.toml" 2>&1), want $(json "$live" | without_bean)"
+    fi
+    sh "$WORK/elsewhere.sh" < "$WORK/server-$name.toml" > "$WORK/undone.toml" 2>"$WORK/err" && rc=0 || rc=$?
+    [ "$rc" -eq 0 ] && [ "$(json "$WORK/undone.toml")" = "$got" ] \
+        && pass "$name, elsewhere: the roots are left as they are" || fail "$name, elsewhere: rc=$rc $(cat "$WORK/err")"
 done
 check "both-commented, serveserve: the array is left byte for byte" \
     'head -n 6 "$WORK/server-both-commented.toml" | cmp -s - "$WORK/live/both-commented.toml"'
@@ -200,26 +202,29 @@ check "bean rolled back: the agent environment stays" \
 sh "$WORK/no-identity.sh" < "$WORK/both.toml" > "$WORK/out.toml"
 check "identity rolled back: Bean's roots stay" '[ "$(json "$WORK/out.toml")" = "$(json "$WORK/both.toml")" ]'
 
-# Without uv nothing checks the result: elsewhere it is still emitted, so a
-# form the script does not edit fails the apply rather than maybe keep a Bean
-# path; on serveserve, with both toggles rolled back, uv is still required.
+# Without uv nothing checks the result: on serveserve, with both toggles
+# rolled back, the apply fails; elsewhere the result is still emitted, and
+# writable_roots, in whatever form, is left as it is.
 mkdir -p "$WORK/nouv"
 ln -s "$(command -v awk)" "$WORK/nouv/awk"; ln -s "$(command -v cat)" "$WORK/nouv/cat"
 nouv() { HOME="$WORK/nouv" PATH="$WORK/nouv" /bin/sh "$@"; }
 printf '["sandbox_workspace_write"]\nwritable_roots = ["%s"]\n' "$DATA" > "$WORK/quoted-bean.toml"
-nouv "$WORK/elsewhere.sh" < "$WORK/quoted-bean.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
-check "elsewhere, no uv: a Bean path in a form it does not edit fails the apply" \
-    '[ "$rc" -ne 0 ] && grep -q "form this script does not edit" "$WORK/err" && [ ! -s "$WORK/out.toml" ]'
 printf '[sandbox_workspace_write]\nwritable_roots = ["%s"]\n' "${DATA%bean}\\u0062ean" > "$WORK/escaped-bean.toml"
-nouv "$WORK/elsewhere.sh" < "$WORK/escaped-bean.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
-check "elsewhere, no uv: an escaped path, maybe Bean's, fails the apply" \
-    '[ "$rc" -ne 0 ] && grep -q "form this script does not edit" "$WORK/err" && [ ! -s "$WORK/out.toml" ]'
-nouv "$WORK/elsewhere.sh" < "$WORK/server-nested-top.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
-check "elsewhere, no uv: Bean's paths come out past a nested array" \
-    '[ "$rc" -eq 0 ] && [ "$(json "$WORK/out.toml")" = "$(json "$WORK/live/nested-top.toml")" ]'
-nouv "$WORK/elsewhere.sh" < "$WORK/server-table.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
-check "elsewhere, no uv: Bean's paths still come out of a table" \
-    '[ "$rc" -eq 0 ] && [ "$(json "$WORK/out.toml")" = "$(json "$WORK/live/table.toml")" ]'
+for live in "$WORK/quoted-bean.toml" "$WORK/escaped-bean.toml" "$WORK/server-table.toml"; do
+    nouv "$WORK/elsewhere.sh" < "$live" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
+    check "elsewhere, no uv ($(basename "$live" .toml)): writable_roots left as it is" \
+        '[ "$rc" -eq 0 ] && [ "$(json "$WORK/out.toml")" = "$(json "$live")" ]'
+done
+# A multi-line string may end in four or five quotes: the scanner must not
+# take the extra ones for a string that hides the rest of the line, or it
+# loses track of arrays and tables (and the Cloudflare entries get doubled).
+for q in '"' "'"; do
+    printf '[mcp_servers.other]\nargs = [%s%s%sx %s%s%s%s]\nkeep = [%s%s%s\nx%s%s%s%s%s]\n[mcp_servers.cloudflare]\nurl = "https://old.example"\n' \
+        "$q" "$q" "$q" "$q" "$q" "$q" "$q" "$q" "$q" "$q" "$q" "$q" "$q" "$q" "$q" > "$WORK/quotes.toml"
+    nouv "$WORK/elsewhere.sh" < "$WORK/quotes.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
+    check "elsewhere, no uv: a multi-line string ending in extra quotes ($q) keeps the scanner on track" \
+        '[ "$rc" -eq 0 ] && [ "$(json "$WORK/out.toml")" = "$(json "$WORK/quotes.toml")" ] && [ "$(grep -c "^\[mcp_servers.cloudflare\]" "$WORK/out.toml")" = 1 ]'
+done
 nouv "$WORK/rolled-back.sh" < "$WORK/server-table.toml" > "$WORK/out.toml" 2>"$WORK/err" && rc=0 || rc=$?
 check "serveserve, both rolled back, no uv: the apply fails rather than go unchecked" \
     '[ "$rc" -ne 0 ] && grep -q "uv not found to check" "$WORK/err" && [ ! -s "$WORK/out.toml" ]'
