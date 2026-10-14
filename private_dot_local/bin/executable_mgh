@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Act on GitHub as Marsh himself, mrshll.
+#
+#   mgh <gh args...>    e.g. mgh pr merge 12
+#   mgh git <args...>   e.g. mgh git push
+#
+# On serveserve gh's only stored login is the machine account, mrshll-agent
+# (agent-gh --seed). Marsh's token lives only in 1Password: this injects it
+# through passh for one command, never writing it anywhere, so acting as
+# mrshll from serveserve always goes through passh. SSH GitHub remotes go over
+# HTTPS for the command and git takes the token from gh, so a push is his.
+# Only authentication changes: `mgh git commit` authors and signs as the
+# checkout's git config says.
+set -euo pipefail
+
+# Marsh creates this item (a classic PAT for mrshll); rename here if his differs.
+MARSH_TOKEN_REF='op://Private/Github mrshll/Token'
+
+[ $# -gt 0 ] || { printf 'usage: mgh <gh args...> | mgh git <args...>\n' >&2; exit 64; }
+[ "$1" = git ] || set -- gh "$@"
+
+unset GITHUB_TOKEN
+# Command-scope config outranks every config file: the empty helper drops any a
+# checkout sets, so git takes GH_TOKEN from gh and nothing else.
+export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=4 \
+    GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_0=git@github.com: \
+    GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=ssh://git@github.com/ \
+    GIT_CONFIG_KEY_2=credential.https://github.com.helper GIT_CONFIG_VALUE_2= \
+    GIT_CONFIG_KEY_3=credential.https://github.com.helper GIT_CONFIG_VALUE_3='!gh auth git-credential'
+# An empty token would leave gh on the stored login, mrshll-agent.
+exec passh run --env-file=<(printf 'GH_TOKEN=%s\n' "$MARSH_TOKEN_REF") -- bash -c '
+    [ -n "${GH_TOKEN-}" ] || { echo "mgh: no token from 1Password" >&2; exit 1; }
+    exec "$@"' mgh "$@"

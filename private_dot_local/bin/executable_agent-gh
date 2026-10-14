@@ -51,9 +51,13 @@ fi
 [ $# -gt 0 ] || { printf 'usage: agent-gh <command> [args...] | agent-gh --setup | agent-gh --seed\n' >&2; exit 64; }
 
 unset GITHUB_TOKEN
-export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=2 \
+# Command-scope config outranks every config file: the empty helper drops any a
+# checkout sets, so git takes GH_TOKEN from gh and nothing else.
+export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=4 \
     GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_0=git@github.com: \
-    GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=ssh://git@github.com/
+    GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=ssh://git@github.com/ \
+    GIT_CONFIG_KEY_2=credential.https://github.com.helper GIT_CONFIG_VALUE_2= \
+    GIT_CONFIG_KEY_3=credential.https://github.com.helper GIT_CONFIG_VALUE_3='!gh auth git-credential'
 # Where --seed stored it, whatever GH_CONFIG_DIR or GH_TOKEN was inherited.
 if token=$(env -u GH_TOKEN GH_CONFIG_DIR="$HOME/.config/gh" \
     gh auth token --hostname github.com --user mrshll-agent 2>/dev/null) &&

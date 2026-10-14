@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Regression test for agent-gh in private_dot_local/bin.
+# Regression test for the GitHub identity wrappers in private_dot_local/bin.
 #
 # mrshll-agent is the ambient identity on serveserve: agent-gh uses its token
 # from gh's own store without passh, and falls back to passh only when that
-# token is missing. It never hands a command another account's login.
+# token is missing. Acting as Marsh (mgh) always goes through passh. Neither
+# hands a command another account's login, and git authenticates with the
+# wrapper's token whatever credential helper a checkout configures.
 #
-# Runs the script against stub gh and passh in a throwaway HOME; no network,
+# Runs the scripts against stub gh and passh in a throwaway HOME; no network,
 # no 1Password, nothing touches the real gh config.
 #
 # Usage: tests/gh_identity_test.sh
@@ -13,6 +15,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 AGENT_GH="$REPO_DIR/private_dot_local/bin/executable_agent-gh"
+MGH="$REPO_DIR/private_dot_local/bin/executable_mgh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -41,6 +44,10 @@ case "$1 $2" in
     "auth login")
         [ -z "${GH_TOKEN-}${GITHUB_TOKEN-}" ] || exit 1
         cat > "$STUB/login-stdin"; touch "$STUB/stored" ;;
+    "auth git-credential")
+        # Like gh: hands git whatever token gh would use.
+        cat >/dev/null
+        printf 'protocol=https\nhost=github.com\nusername=x-access-token\npassword=%s\n' "${GH_TOKEN-}" ;;
     "api --hostname")
         [ "$3 $4" = "github.com user" ] || { echo "not github.com" >&2; exit 1; }
         cat "$STUB/login-as" 2>/dev/null || echo mrshll-agent ;;
@@ -62,11 +69,30 @@ cat > "$WORK/bin/probe" <<'EOF'
 printf 'GH_TOKEN=%s\nGITHUB_TOKEN=%s\nPASSH_NO_FALLBACK=%s\n' "${GH_TOKEN-}" "${GITHUB_TOKEN-}" "${PASSH_NO_FALLBACK-}"
 git config --get-all url.https://github.com/.insteadOf || true
 EOF
+# A checkout-level helper that would answer with some other account.
+cat > "$WORK/bin/other-helper" <<'EOF'
+#!/usr/bin/env bash
+cat >/dev/null
+printf 'username=someone-else\npassword=checkout-helper-token\n'
+EOF
 chmod +x "$WORK/bin/"*
+# ~/.gitconfig's GitHub helper, as dot_gitconfig.tmpl renders it (gh on PATH).
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n' \
+    > "$WORK/home/.gitconfig"
+git init -q "$WORK/repo"
+git -C "$WORK/repo" config credential.https://github.com.helper ""
+git -C "$WORK/repo" config --add credential.https://github.com.helper "!$WORK/bin/other-helper"
+git -C "$WORK/repo" config credential.helper "!$WORK/bin/other-helper"
+git -C "$WORK/repo" config credential.https://github.com/mrshll.helper "!$WORK/bin/other-helper"
+# credential WRAPPER...: the password git would push github.com with.
+credential() {
+    printf 'protocol=https\nhost=github.com\n\n' |
+        run "$@" git -C "$WORK/repo" credential fill 2>/dev/null | sed -n 's/^password=//p'
+}
 
 run() {
     rm -f "$STUB/gh.log" "$STUB/gh-env.log" "$STUB/passh.log"
-    env -u GH_TOKEN -u GITHUB_TOKEN HOME="$WORK/home" STUB="$WORK" \
+    env -u GH_TOKEN -u GITHUB_TOKEN HOME="$WORK/home" STUB="$WORK" GIT_CONFIG_NOSYSTEM=1 \
         PATH="$WORK/bin:/usr/bin:/bin" "$@"
 }
 export STUB="$WORK"
@@ -86,6 +112,9 @@ check "agent-gh: looks in the config --seed wrote, whatever GH_CONFIG_DIR is inh
 check "agent-gh: an inherited GH_TOKEN is neither used nor passed on" \
     'grep -qx "GH_TOKEN=agent-stored-token" <<<"$out" && grep -q "|GH_TOKEN=$" "$WORK/gh.log"'
 check "agent-gh: an inherited GITHUB_TOKEN is dropped" 'grep -qx "GITHUB_TOKEN=" <<<"$out"'
+
+got=$(credential bash "$AGENT_GH")
+check "agent-gh git: pushes with the agent token, not a checkout's own helper" '[ "$got" = agent-stored-token ]'
 
 # --- agent-gh, nothing stored ------------------------------------------------
 rm -f "$WORK/stored"
@@ -114,6 +143,27 @@ run bash "$AGENT_GH" --seed >/dev/null 2>&1 && seeded=0 || seeded=$?
 check "agent-gh --seed: refuses a token that is not mrshll-agent's, storing nothing" \
     '[ "$seeded" -ne 0 ] && ! grep -q "^auth login" "$WORK/gh.log"'
 rm -f "$WORK/login-as"
+
+# --- mgh ---------------------------------------------------------------------
+touch "$WORK/stored"
+out=$(run bash "$MGH" pr list)
+check "mgh: gh as Marsh, token from passh, never the agent's" \
+    'grep -q "^GH_TOKEN=op://" "$WORK/passh.log" && ! grep -q "Github agent" "$WORK/passh.log" && grep -q "^gh-ran pr list GH_TOKEN=resolved:op://" <<<"$out"'
+out=$(run env GH_TOKEN=agent-stored-token bash "$MGH" git config --get-all url.https://github.com/.insteadOf)
+check "mgh git: token from passh" 'grep -q "^GH_TOKEN=op://" "$WORK/passh.log"'
+check "mgh git: SSH remotes go over HTTPS" 'grep -qx "git@github.com:" <<<"$out"'
+got=$(credential bash "$MGH")
+check "mgh git: pushes with Marsh's injected token, not a checkout's own helper" \
+    '[ "$got" = "resolved:$(sed -n "s/^MARSH_TOKEN_REF=.\(.*\).$/\1/p" "$MGH")" ]'
+# A passh that resolves the item to nothing.
+mkdir -p "$WORK/emptybin"
+printf '#!/usr/bin/env bash\nshift 3; GH_TOKEN= exec "$@"\n' > "$WORK/emptybin/passh"
+chmod +x "$WORK/emptybin/passh"
+out=$(run env PATH="$WORK/emptybin:$WORK/bin:/usr/bin:/bin" bash "$MGH" pr list 2>/dev/null) && rc=0 || rc=$?
+check "mgh: an empty token fails rather than falling back to the stored agent login" \
+    '[ "$rc" -ne 0 ] && ! grep -q "^gh-ran" <<<"$out"'
+run bash "$MGH" >/dev/null 2>&1 && rc=0 || rc=$?
+check "mgh: no arguments is a usage error" '[ "$rc" -eq 64 ] && [ ! -e "$WORK/passh.log" ]'
 
 echo
 [ "$failures" -eq 0 ] && echo "all passed" || { echo "$failures failure(s)" >&2; exit 1; }
