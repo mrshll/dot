@@ -2,11 +2,17 @@
 # Deskflow on the Mac: the server, sharing this keyboard and mouse with
 # marshbox. Screen layout is in deskflow-server.conf beside this file.
 set -eu
-settings='core/coreMode=2
+{{ template "deskflow-address.sh" . }}
+# Home LAN only: the server listens on the Mac's reserved home address, read
+# from listen-address beside this file (written by hand, never committed).
+# Away from home the Mac doesn't hold it, so the server can't listen; without
+# a valid address it listens on loopback, never on every interface.
+settings="core/coreMode=2
 core/computerName=macbook
+core/interface=$(home_address "{{ .chezmoi.homeDir }}/Library/Deskflow/listen-address")
 gui/startCoreWithGui=true
 security/tlsEnabled=true
 security/checkPeerFingerprints=true
 server/externalConfig=true
-server/externalConfigFile={{ .chezmoi.homeDir }}/Library/Deskflow/deskflow-server.conf'
+server/externalConfigFile={{ .chezmoi.homeDir }}/Library/Deskflow/deskflow-server.conf"
 {{ template "deskflow-settings.sh" . }}

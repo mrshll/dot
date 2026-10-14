@@ -116,9 +116,12 @@ fi
 
 # --- 2. the Deskflow.conf modify scripts ------------------------------------
 
+# Expected files hold @ADDR@ where the owned address goes: core/interface on
+# the Mac, client/remoteHost on marshbox.
 MAC_FRESH="[core]
 coreMode=2
 computerName=macbook
+interface=@ADDR@
 
 [gui]
 startCoreWithGui=true
@@ -131,7 +134,10 @@ checkPeerFingerprints=true
 externalConfig=true
 externalConfigFile=$MAC_HOME_DIR/Library/Deskflow/deskflow-server.conf
 "
-BOX_FRESH="[core]
+BOX_FRESH="[client]
+remoteHost=@ADDR@
+
+[core]
 coreMode=1
 computerName=marshbox
 
@@ -170,7 +176,7 @@ BOX_EXPECTED="[General]
 someKey=1
 
 [client]
-remoteHost=example
+remoteHost=@ADDR@
 binaryPath=/app/bin/deskflow-client
 
 [core]
@@ -187,24 +193,22 @@ checkPeerFingerprints=true
 windowGeometry=@ByteArray(\\x1=abc)
 startCoreWithGui=true
 "
-# With remote-host beside Deskflow.conf, client/remoteHost is ours: it
-# replaces the old value, duplicates go, and [client] is added if missing.
-CLIENT_BLOCK="[client]
+# client/remoteHost is always ours: it replaces the old value, duplicates
+# go, and [client] is added if missing.
+BOX_EXISTING_DUP="${BOX_EXISTING/binaryPath=/remoteHost=stale
+binaryPath=}"
+BOX_NOCLIENT="${BOX_EXISTING/"[client]
 remoteHost=example
 binaryPath=/app/bin/deskflow-client
 
-"
-BOX_HOSTED="${BOX_EXPECTED/remoteHost=example/remoteHost=newhost}"
-BOX_EXISTING_DUP="${BOX_EXISTING/binaryPath=/remoteHost=stale
-binaryPath=}"
-BOX_NOCLIENT="${BOX_EXISTING/"$CLIENT_BLOCK"/}"
-BOX_NOCLIENT_HOSTED="${BOX_EXPECTED/"$CLIENT_BLOCK"/}
+"/}"
+BOX_NOCLIENT_EXPECTED="${BOX_EXPECTED/"[client]
+remoteHost=@ADDR@
+binaryPath=/app/bin/deskflow-client
+
+"/}
 [client]
-remoteHost=newhost
-"
-BOX_FRESH_HOSTED="$BOX_FRESH
-[client]
-remoteHost=newhost
+remoteHost=@ADDR@
 "
 MAC_EXISTING="[General]
 someKey=1
@@ -236,6 +240,7 @@ closeToTray=true
 coreMode=2
 lastVersion=1.20.1
 computerName=macbook
+interface=@ADDR@
 
 [client]
 remoteHost=example
@@ -248,6 +253,18 @@ externalConfigFile=$MAC_HOME_DIR/Library/Deskflow/deskflow-server.conf
 tlsEnabled=true
 checkPeerFingerprints=true
 "
+# An interface the GUI set to every interface, then again to another value:
+# the first is replaced in place and the repeat dropped.
+MAC_EXISTING_IFACE="${MAC_EXISTING/lastVersion=1.20.1/interface=0.0.0.0
+lastVersion=1.20.1
+interface=10.9.9.9}"
+MAC_EXPECTED_IFACE="${MAC_EXPECTED/"coreMode=2
+lastVersion=1.20.1
+computerName=macbook
+interface=@ADDR@"/"coreMode=2
+interface=@ADDR@
+lastVersion=1.20.1
+computerName=macbook"}"
 
 # resolve PATH: the executable PATH finally points at.
 resolve() {
@@ -281,24 +298,31 @@ else
     pass "awks found: $(for a in "${awks[@]}"; do printf '%s ' "${a%%:*}"; done)"
 fi
 
-# modify_case AWK MACHINE CONF TARGET LABEL INPUT EXPECTED [HOST [REMOTE]]:
-# apply TARGET over CONF holding INPUT (absent if INPUT is "-"), with HOST in
-# remote-host beside it (absent if "-"), and compare with EXPECTED; the file
-# must hold exactly one remoteHost=REMOTE (unchecked if "-"). Then apply
-# again and require no change.
+# modify_case AWK MACHINE CONF TARGET LABEL INPUT EXPECTED [FILE [ADDR]]:
+# apply TARGET over CONF holding INPUT (absent if INPUT is "-"), with FILE
+# as the address file beside it (listen-address on the Mac, remote-host on
+# marshbox; absent if "-"), and compare with EXPECTED, its @ADDR@ standing
+# for ADDR (default 127.0.0.1). The file must hold exactly one owned address
+# line, interface=ADDR or remoteHost=ADDR. Then apply again and require no
+# change.
 modify_case() {
     local awk_name=$1 awk_bin=$2 machine=$3 conf=$4 target=$5 label=$6 input=$7 expected=$8
-    local host=${9--} remote=${10--} homedir=
+    local file=${9--} addr=${10:-127.0.0.1} addr_file key
     local home="$WORK/modify-$machine-$awk_name-$RANDOM" awkdir="$WORK/awk-$awk_name"
+    case $machine in
+        mac) addr_file=listen-address key=interface ;;
+        marshbox) addr_file=remote-host key=remoteHost ;;
+    esac
     mkdir -p "$awkdir" "$home/$(dirname "$conf")"
     ln -sf "$awk_bin" "$awkdir/awk"
     if [ "$input" != - ]; then
         printf '%s' "$input" | sed 's/$/\r/' > "$home/$conf"
     fi
-    [ "$host" != - ] && printf '%s' "$host" > "$home/$(dirname "$conf")/remote-host"
-    # marshbox's script reads remote-host from the home it renders for.
-    [ "$machine" = marshbox ] && homedir=$home
-    HOMEDIR=$homedir PATH="$awkdir:$PATH" chez apply "$machine" "$home" "$home/$target" --force
+    [ "$file" != - ] && printf '%s' "$file" > "$home/$(dirname "$conf")/$addr_file"
+    # Both scripts read the address file from the home they render for.
+    expected=${expected//@ADDR@/$addr}
+    expected=${expected//"$MAC_HOME_DIR"/"$home"}
+    HOMEDIR=$home PATH="$awkdir:$PATH" chez apply "$machine" "$home" "$home/$target" --force
     if printf '%s' "$expected" | cmp -s - "$home/$conf"; then
         pass "$machine/$awk_name: $label gives the expected file"
     else
@@ -308,13 +332,11 @@ modify_case() {
     if grep -q $'\r' "$home/$conf"; then
         fail "$machine/$awk_name: $label left a CR"
     fi
-    if [ "$remote" != - ]; then
-        [ "$(grep -c '^remoteHost=' "$home/$conf")" = 1 ] && grep -qx "remoteHost=$remote" "$home/$conf" \
-            && pass "$machine/$awk_name: $label has remoteHost=$remote once" \
-            || fail "$machine/$awk_name: $label remoteHost is: $(grep '^remoteHost=' "$home/$conf" | tr '\n' ' ')"
-    fi
+    [ "$(grep -c "^$key=" "$home/$conf")" = 1 ] && grep -qxF "$key=$addr" "$home/$conf" \
+        && pass "$machine/$awk_name: $label has $key=$addr once" \
+        || fail "$machine/$awk_name: $label $key is: $(grep "^$key=" "$home/$conf" | tr '\n' ' ')"
     cp "$home/$conf" "$WORK/before"
-    HOMEDIR=$homedir PATH="$awkdir:$PATH" chez apply "$machine" "$home" "$home/$target" --force
+    HOMEDIR=$home PATH="$awkdir:$PATH" chez apply "$machine" "$home" "$home/$target" --force
     cmp -s "$WORK/before" "$home/$conf" \
         && pass "$machine/$awk_name: $label is unchanged by a second apply" \
         || fail "$machine/$awk_name: $label changes on a second apply"
@@ -324,22 +346,76 @@ for entry in ${awks[@]+"${awks[@]}"}; do
     name=${entry%%:*} bin=${entry#*:}
     modify_case "$name" "$bin" mac "$MAC_CONF" Library/Deskflow "no existing file" - "$MAC_FRESH"
     modify_case "$name" "$bin" mac "$MAC_CONF" Library/Deskflow "a GUI-written CRLF file" \
-        "$MAC_EXISTING" "$MAC_EXPECTED" - example
+        "$MAC_EXISTING" "$MAC_EXPECTED"
+    modify_case "$name" "$bin" mac "$MAC_CONF" Library/Deskflow "listen-address, no existing file" \
+        - "$MAC_FRESH" $' 192.168.1.10 \n' 192.168.1.10
+    modify_case "$name" "$bin" mac "$MAC_CONF" Library/Deskflow "listen-address over a GUI-written file" \
+        "$MAC_EXISTING" "$MAC_EXPECTED" $'192.168.1.10\n' 192.168.1.10
+    modify_case "$name" "$bin" mac "$MAC_CONF" Library/Deskflow "listen-address over interface=0.0.0.0" \
+        "$MAC_EXISTING_IFACE" "$MAC_EXPECTED_IFACE" $'192.168.1.10\n' 192.168.1.10
+    modify_case "$name" "$bin" mac "$MAC_CONF" Library/Deskflow "no listen-address over interface=0.0.0.0" \
+        "$MAC_EXISTING_IFACE" "$MAC_EXPECTED_IFACE"
     modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "no existing file" - "$BOX_FRESH"
     modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "a GUI-written CRLF file" \
-        "$BOX_EXISTING" "$BOX_EXPECTED" - example
-    # remote-host, a placeholder name padded with whitespace.
+        "$BOX_EXISTING" "$BOX_EXPECTED"
     modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "remote-host, no existing file" \
-        - "$BOX_FRESH_HOSTED" $' newhost \n' newhost
-    modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "remote-host over an old remoteHost" \
-        "$BOX_EXISTING_DUP" "$BOX_HOSTED" $' newhost \n' newhost
+        - "$BOX_FRESH" $' 192.168.1.10 \n' 192.168.1.10
+    modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "remote-host over remoteHost=example" \
+        "$BOX_EXISTING" "$BOX_EXPECTED" $'192.168.1.10\n' 192.168.1.10
+    modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "remote-host over a duplicated remoteHost" \
+        "$BOX_EXISTING_DUP" "$BOX_EXPECTED" $'192.168.1.10\n' 192.168.1.10
     modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "remote-host, no [client] section" \
-        "$BOX_NOCLIENT" "$BOX_NOCLIENT_HOSTED" $' newhost \n' newhost
-    modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "an empty remote-host" \
-        "$BOX_EXISTING" "$BOX_EXPECTED" "" example
-    modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "a whitespace-only remote-host" \
-        "$BOX_EXISTING" "$BOX_EXPECTED" $' \t\n' example
+        "$BOX_NOCLIENT" "$BOX_NOCLIENT_EXPECTED" $'192.168.1.10\n' 192.168.1.10
+    modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "an invalid remote-host, no [client] section" \
+        "$BOX_NOCLIENT" "$BOX_NOCLIENT_EXPECTED" $'example.local\n'
 done
+
+# home_address through both scripts, under the default awk (the address is
+# checked by grep, not awk): FILE CONTENTS|EXPECTED ADDRESS|LABEL. "-" is no
+# file at all.
+address_cases=(
+    $'192.168.1.10\n|192.168.1.10|192.168.x.y'
+    $'192.168.0.0\n|192.168.0.0|192.168.0.0'
+    $'192.168.255.255\n|192.168.255.255|192.168.255.255'
+    $'10.0.0.5\n|10.0.0.5|10.x'
+    $'10.255.255.255\n|10.255.255.255|10.255.255.255'
+    $'172.16.0.1\n|172.16.0.1|172.16.x'
+    $'172.20.5.5\n|172.20.5.5|172.20.x'
+    $'172.31.255.254\n|172.31.255.254|172.31.x'
+    $' \t192.168.1.10 \t\n|192.168.1.10|192.168.x.y padded with whitespace'
+    $'\n192.168.1.10\n|127.0.0.1|a blank first line'
+    $'192.168.1.10\n8.8.8.8\n|192.168.1.10|a second line, ignored'
+    $'192.168.1.10|192.168.1.10|no trailing newline'
+    "-|127.0.0.1|no file"
+    "|127.0.0.1|an empty file"
+    $' \t\n|127.0.0.1|a whitespace-only file'
+    $'0.0.0.0\n|127.0.0.1|0.0.0.0'
+    $'172.32.0.1\n|127.0.0.1|172.32.0.1'
+    $'172.15.0.1\n|127.0.0.1|172.15.0.1'
+    $'100.64.0.1\n|127.0.0.1|100.64.0.1 (Tailscale)'
+    $'100.127.1.1\n|127.0.0.1|100.127.1.1 (Tailscale)'
+    $'8.8.8.8\n|127.0.0.1|8.8.8.8'
+    $'127.0.0.1\n|127.0.0.1|127.0.0.1'
+    $'256.1.1.1\n|127.0.0.1|256.1.1.1'
+    $'192.168.1.256\n|127.0.0.1|192.168.1.256'
+    $'192.168.1\n|127.0.0.1|192.168.1'
+    $'192.168.1.1.1\n|127.0.0.1|192.168.1.1.1'
+    $'example.local\n|127.0.0.1|example.local'
+    $'example.ts.net\n|127.0.0.1|example.ts.net'
+    $'fe80::1\n|127.0.0.1|fe80::1'
+    $'192.168.1.10 extra\n|127.0.0.1|192.168.1.10 extra'
+)
+if [ ${#awks[@]} -gt 0 ]; then
+    name=${awks[0]%%:*} bin=${awks[0]#*:}
+    for c in "${address_cases[@]}"; do
+        contents=${c%%|*} rest=${c#*|}
+        want=${rest%%|*} label=${rest#*|}
+        modify_case "$name" "$bin" mac "$MAC_CONF" Library/Deskflow "listen-address $label" \
+            "$MAC_EXISTING_IFACE" "$MAC_EXPECTED_IFACE" "$contents" "$want"
+        modify_case "$name" "$bin" marshbox "$BOX_CONF" .var "remote-host $label" \
+            "$BOX_EXISTING" "$BOX_EXPECTED" "$contents" "$want"
+    done
+fi
 
 # --- 3. names and layout agree ----------------------------------------------
 

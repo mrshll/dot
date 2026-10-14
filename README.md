@@ -56,16 +56,26 @@ display: [Deskflow](https://github.com/deskflow/deskflow) with the Mac as
 server and marshbox as client, TLS on and both fingerprints trusted. marshbox
 sits to the right of the Mac (`Library/Deskflow/deskflow-server.conf`).
 
+It works on the home LAN only: both ends use the Mac's home LAN address,
+never a Tailscale name or 100.x address. The Mac has a DHCP reservation on
+the home router. The server listens on that address alone,
+read from `~/Library/Deskflow/listen-address`, and marshbox connects to it,
+read from `remote-host` beside its Deskflow.conf. Both are uncommitted
+one-line files, so the address stays out of this repo. Anything but a
+private IPv4 address there (a Tailscale name or 100.x address, a hostname,
+nothing at all) falls back to loopback. Away from home the Mac doesn't hold
+the address, so the server can't listen (unless another network happens to
+hand it the same one; mutual TLS still turns away anything but marshbox). If
+Deskflow says it's stopped once you're home again, start it.
+
 The Deskflow app owns each side and starts its own core: a LaunchAgent opens
 it at login on the Mac, an XDG autostart entry on marshbox (Flatpak, since
-Ubuntu 24.04 has no package). `modify_Deskflow.conf` owns only the role, name
-and TLS keys, and the app keeps everything else. marshbox's server address
-comes from `remote-host`, an uncommitted one-line file beside its
-Deskflow.conf, so the Mac's name stays out of this repo. Quit Deskflow before
-applying, or the running app may write its own values back.
+Ubuntu 24.04 has no package). `modify_Deskflow.conf` owns only the role,
+name, address and TLS keys; the app keeps everything else. Quit Deskflow
+before applying, or the running app may write its own values back.
 
 marshbox runs the client only inside a graphical session, so its login screen
-gets no input from the Mac.
+gets no input from the Mac: log in there with marshbox's own spare keyboard.
 
 ## What's managed
 
