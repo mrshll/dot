@@ -78,7 +78,7 @@ GitHub on serveserve: the only login is my machine account, mrshll-agent,
 stored in gh's config, so plain `gh` and git (SSH remotes are rewritten to
 HTTPS) act as it with no passh. Run `gh` and `git push` through `agent-gh`
 anyway (`agent-gh gh pr create`, `agent-gh git push`): it pins mrshll-agent
-whatever else is in the environment. `agent-gh --setup` makes a checkout author
+over any GH_TOKEN or GITHUB_TOKEN it inherits. `agent-gh --setup` makes a checkout author
 and sign commits as it. My own GitHub login (mrshll) is deliberately absent
 from serveserve: anything that must be done as me happens on my laptop. Never
 add it back (`gh auth login`, a token, an SSH key) — tell me instead.
