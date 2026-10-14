@@ -25,8 +25,10 @@ set -eu
 # dotted keys) where it is not. This opens the network to every workspace-write
 # session on serveserve; one started with
 # --config sandbox_workspace_write.network_access=... keeps its own value. To
-# roll back (set $net to false), the key is removed where it still holds true.
-# Other machines' values are left as they are.
+# roll back (set $net to false), the key is removed where it still holds true;
+# in a form this does not edit (an inline, quoted or nested table, a quoted or
+# escaped key), the apply fails and leaves it. Other machines' values are left
+# as they are.
 {{- $manage := .is_server }}
 {{- $bean := .is_server }}
 {{- $net := .is_server }}
