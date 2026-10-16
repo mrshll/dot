@@ -100,8 +100,9 @@ printf "model = 'kept'\n\n[shell_environment_policy]\n'set'.KEPT = 'yes'\n" > "$
 printf 'model = "kept"\n\n[shell_environment_policy."set"]\nKEPT = "yes"\n' > "$WORK/live/quoted.toml"
 printf 'model = "kept"\n\n[shell_environment_policy.set]\nKEPT = "yes"\nGH_CONFIG_DIR = """\n/old\n"""\n' > "$WORK/live/multiline.toml"
 # json FILE: the TOML as JSON, Cloudflare MCP entries (managed here) left out,
-# and Bean's writable roots (tests/codex_bean_roots_test.sh), which none of these hold.
-json() { toml < "$1" | jq -cS 'del(.sandbox_workspace_write, .mcp_servers.cloudflare, .mcp_servers["cloudflare-docs"], .mcp_servers["cloudflare-bindings"], .mcp_servers["cloudflare-builds"], .mcp_servers["cloudflare-observability"]) | if .mcp_servers == {} then del(.mcp_servers) else . end'; }
+# and Bean's writable roots (tests/codex_bean_roots_test.sh), which none of these hold,
+# and the Vim mode default (tests/codex_vim_mode_test.sh).
+json() { toml < "$1" | jq -cS 'del(.sandbox_workspace_write, .tui.vim_mode_default, .mcp_servers.cloudflare, .mcp_servers["cloudflare-docs"], .mcp_servers["cloudflare-bindings"], .mcp_servers["cloudflare-builds"], .mcp_servers["cloudflare-observability"]) | if .mcp_servers == {} then del(.mcp_servers) else . end | if .tui == {} then del(.tui) else . end'; }
 for live in "$WORK"/live/*.toml; do
     name=$(basename "$live" .toml)
     json "$live" >/dev/null || { fail "codex fixture $name is not valid TOML"; continue; }

@@ -1,8 +1,14 @@
 #!/bin/sh
-# Preserve Codex-managed local state; manage only Cloudflare MCP entries and,
-# on serveserve, the GitHub identity of the commands Codex runs, Bean's
-# writable roots and the sandbox's network access.
+# Preserve Codex-managed local state; manage only Cloudflare MCP entries, the
+# Vim mode default and, on serveserve, the GitHub identity of the commands Codex
+# runs, Bean's writable roots and the sandbox's network access.
 set -eu
+# Everywhere: Codex starts its composer in Vim normal mode.
+# tui.vim_mode_default is set to true where it is, and added at the end of the
+# [tui] table (or a new one) where it is not. In a form this does not edit (a
+# quoted or inline table, top-level dotted keys, or any value but true or
+# false), the apply fails and leaves it.
+#
 # serveserve: Codex's commands run gh and git as mrshll-agent: gh reads the
 # agents' config (agent-gh --seed), and git authors and signs with its key and
 # pushes over HTTPS with that login (dot_config/git/agent.gitconfig.tmpl).
@@ -158,13 +164,16 @@ function roots(   r, k, n, lines, list, data, config, changed) {
 function insw() { return section == "sw" || (section == "top" && swdotted) }
 function pendroots() { return bean && !rootsseen && !added && insw() }
 function pendnet() { return net && !netseen && !netadded && insw() }
-function pending() { return pendroots() || pendnet() }
-# endsection(): give a pending section its writable_roots and network_access,
-# before the blank lines and comments that end it.
+# pendvim(): the [tui] table still lacks the vim_mode_default it gets when it ends.
+function pendvim() { return section == "tui" && !vimseen && !vimadded }
+function pending() { return pendroots() || pendnet() || pendvim() }
+# endsection(): give a pending section its writable_roots, network_access and
+# vim_mode_default, before the blank lines and comments that end it.
 function endsection(   key) {
     key = section == "top" ? "sandbox_workspace_write." : ""
     if (pendroots()) { print key "writable_roots = " beanroots; added = 1 }
     if (pendnet()) { print key "network_access = true"; netadded = 1 }
+    if (pendvim()) { print "vim_mode_default = true"; vimadded = 1 }
     printf "%s", held; held = ""
 }
 BEGIN {
@@ -182,6 +191,10 @@ instr != "" { scan($0); if (!skip) print; next }
 /^[ \t]*\[/ && !inarray {
     endsection()
     section = ($0 ~ /^[ \t]*\[[ \t]*sandbox_workspace_write[ \t]*\][ \t]*(#.*)?$/) ? "sw" : "other"
+    if ($0 ~ /^[ \t]*\[[ \t]*tui[ \t]*\][ \t]*(#.*)?$/) section = "tui"
+    # Any other spelling of the table itself (quoted, an array) is one this does not edit.
+    else if ($0 ~ /^[ \t]*\[+[ \t]*["\047]?tui["\047]?[ \t]*\]/) tuiother = 1
+    if (section == "tui") tuitable = 1
     if (section == "sw") swtable = 1
     # Any other spelling of the table (quoted, nested) is one this does not edit.
     else if ($0 ~ /^[ \t]*\[+[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*(\]|\.)/) swother = swform = 1
@@ -216,6 +229,17 @@ server && !inarray && (section == "sw" && /^[ \t]*["\047]?network_access["\047]?
     else if (!net && rest ~ /^true/) next
     print; next
 }
+# vim_mode_default in the [tui] table: set to true; any value but true or
+# false is a form this does not edit.
+!inarray && section == "tui" && /^[ \t]*["\047]?vim_mode_default["\047]?[ \t]*=/ {
+    vimseen = 1
+    rest = $0; sub(/^[^=]*=[ \t]*/, "", rest)
+    if (rest !~ /^(true|false)[ \t\r]*(#.*)?$/) { vimfail = 1; print; next }
+    if (rest ~ /^false/) $0 = substr($0, 1, length($0) - length(rest)) "true" substr(rest, 6)
+    print; next
+}
+# tui as an inline table or dotted keys at the top level.
+section == "top" && /^[ \t]*["\047]?tui["\047]?[ \t]*[.=]/ { tuiother = 1 }
 section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*\./ { swdotted = 1 }
 section == "top" && /^[ \t]*["\047]?sandbox_workspace_write["\047]?[ \t]*=/ { swother = swform = 1 }
 inset &&/^[ \t]*["\047]?(GIT_CONFIG_GLOBAL|GH_CONFIG_DIR)["\047]?[ \t]*=/ {
@@ -238,6 +262,12 @@ END {
         printf "\n[sandbox_workspace_write]\n"
         if (needroots) printf "writable_roots = %s\n", beanroots
         if (neednet) print "network_access = true"
+    }
+    if (!vimseen && !vimadded && !tuitable && !tuiother) printf "\n[tui]\nvim_mode_default = true\n"
+    if (vimfail || !vimseen && !vimadded && tuiother) {
+        print "codex config: tui.vim_mode_default is in a form this script does not edit;" > "/dev/stderr"
+        print "  make it vim_mode_default = true or false in a plain [tui] table, then apply again" > "/dev/stderr"
+        exit 1
     }
     # Not editing it fails the apply where the Bean paths go in; where they come
     # out, the check below fails it if they are left in.
@@ -286,8 +316,8 @@ TOML
 # values when managing and neither agent value otherwise, hold the live
 # writable_roots in order with the Bean paths appended or removed, hold
 # network_access true on serveserve (or, rolled back, anything but true) and as
-# it was elsewhere, and equal the live config in everything else (Cloudflare
-# entries aside), or apply fails and leaves the live file as it is. sync.sh's
+# it was elsewhere, hold tui.vim_mode_default true, and equal the live config
+# in everything else (Cloudflare entries aside), or apply fails and leaves the live file as it is. sync.sh's
 # ssh shell may not have uv on PATH. Without uv the check is required on
 # serveserve, whichever toggles are rolled back, and skipped elsewhere.
 uv=$(command -v uv || { for u in "$HOME/.local/bin/uv" /opt/homebrew/bin/uv; do [ -x "$u" ] && echo "$u" && break; done; } || true)
@@ -328,6 +358,10 @@ def unmanaged(config):
     sandbox.pop("network_access", None)
     if sandbox:
         config["sandbox_workspace_write"] = sandbox
+    tui = dict(config.pop("tui", {}))
+    tui.pop("vim_mode_default", None)
+    if tui:
+        config["tui"] = tui
     return config
 
 def roots(config):
@@ -353,6 +387,8 @@ elif server and want is True:
     want = None
 if network(out) != want or type(network(out)) is not type(want):
     sys.exit("codex config: the result does not hold the expected network_access; not applied")
+if out.get("tui", {}).get("vim_mode_default") is not True:
+    sys.exit("codex config: the result does not hold tui.vim_mode_default = true; not applied")
 if unmanaged(live) != unmanaged(out):
     sys.exit("codex config: the result changes more than the managed keys; not applied")
 ' "$tmp/live.toml" "$tmp/out.toml" "$gitconfig" "$ghconfig" "$manage" "$server" "$bean" "$net" "$beandata" "$beanconfig"

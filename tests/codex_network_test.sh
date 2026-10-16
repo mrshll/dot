@@ -44,11 +44,11 @@ render true bean > "$WORK/no-bean.sh"
 render true bean net > "$WORK/neither.sh"
 render true manage bean net > "$WORK/rolled-back.sh"
 
-# json FILE: the TOML as JSON, leaving out the Cloudflare MCP entries and the
-# agent environment, which the modifier also manages.
+# json FILE: the TOML as JSON, leaving out the Cloudflare MCP entries, the
+# agent environment and the Vim mode default, which the modifier also manages.
 json() {
     uv run --no-project python -I -c 'import json, sys, tomllib; print(json.dumps(tomllib.load(sys.stdin.buffer)))' < "$1" |
-        jq -cS 'del(.mcp_servers, .shell_environment_policy)'
+        jq -cS 'del(.mcp_servers, .shell_environment_policy, .tui.vim_mode_default) | if .tui == {} then del(.tui) else . end'
 }
 # with_bean: JSON with Bean's paths appended where missing (tests/codex_bean_roots_test.sh).
 with_bean() {
